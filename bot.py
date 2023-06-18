@@ -303,7 +303,7 @@ def member_checkin(chat_id, user_id):
 # ----------- Количество неудачных проверок нового участника -----------
 def member_false_checkin_count(chat_id, user_id, period):
 	table_name = 'members'
-	sqlite_query = f"SELECT count(time_joined) FROM {table_name} WHERE chat_id=={chat_id} AND user_id=={user_id} AND time_checkin==0 AND time_joined>{int(time.time()-period*24*60*60)}"
+	sqlite_query = f"SELECT count(time_joined) FROM {table_name} WHERE chat_id=={chat_id} AND user_id=={user_id} AND time_checkin==0 AND time_joined>{int(time.time())-period*24*60*60}"
 	try:
 		with sqlite3.connect(path_full_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
@@ -330,17 +330,22 @@ def member_set_checked(chat_id, user_id):
 		log(f'Ошибка записи времени прохождения проверки новым участником {user_id} {error}', chat_id)
 
 # -------- Блокировка участника и вставка данных в таблицу ban ---------
-def ban_member(chat_id, user_banned_id, time_banned=config.ban_days*24*60*60, user_voted_id=config.bot_id):
-	ban_data = None
-	if time_banned != 0:	# Блокировать участника, только если это НЕ голосование
+def ban_member(chat_id, user_banned_id, until_time=int(time.time())+config.ban_days*24*60*60, user_voted_id=config.bot_id):
+	if until_time >= int(time.time())+(config.ban_days-1)*24*60*60:
+		ban_forever = True
+	else:
+		ban_forever = False
+
+	if until_time != 0:	# Блокировать участника, только если это НЕ голосование
 		try:
-			ban_data = bot.ban_chat_member(chat_id, user_banned_id, until_date=time_banned)
+			bot.ban_chat_member(chat_id, user_banned_id, until_date=until_time)
 		except Exception:
 			log(f'Ошибка блокировки участника {user_banned_id}', chat_id)
+		else:
+			if ban_forever:
+				log(f'Заблокирован участник {user_banned_id}', chat_id)
 
-	if ((ban_data and time_banned >= config.ban_days*24*60*60)
-	or (time_banned == 0)):
-		log(f'Заблокирован участник {user_banned_id}', chat_id)
+	if ban_forever or until_time == 0:
 		table_name = 'ban'
 		sqlite_query = f"INSERT INTO {table_name} (chat_id, user_banned_id, user_voted_id, unix_time) VALUES ({chat_id}, {user_banned_id}, {user_voted_id}, {int(time.time())})"
 		try:
@@ -349,8 +354,6 @@ def ban_member(chat_id, user_banned_id, time_banned=config.ban_days*24*60*60, us
 				cursor.execute(sqlite_query)			
 		except sqlite3.Error as error:
 			log(f'Ошибка записи {user_banned_id} в таблицу ban {error}', chat_id)
-
-	return ban_data
 
 # ------------- Получение списка проголосовавших за ban ----------------
 def ban_voted_get_list(chat_id, banned_id, ban_init_time):
@@ -381,7 +384,7 @@ def messages_add_new(message):
 # ---------------- Удаление сообщений участника группы ------------------ 
 def messages_delete(chat_id, from_user_id):
 	table_name = 'messages'
-	sqlite_query = f"SELECT message_id FROM {table_name} WHERE chat_id=={chat_id} AND from_user_id=={from_user_id} AND unix_time>{int(time.time()-2*24*60*60)}"
+	sqlite_query = f"SELECT message_id FROM {table_name} WHERE chat_id=={chat_id} AND from_user_id=={from_user_id} AND unix_time>{int(time.time())-2*24*60*60}"
 	try:
 		with sqlite3.connect(path_full_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
@@ -406,12 +409,12 @@ def statistics_send(chat_id, period=config.statistics_period_days):
 			cursor.row_factory = lambda cursor, row: row[0]	# Вывод только первого элемента вместо кортежа
 			
 			# Прошли проверку за период
-			sqlite_query = f"SELECT count(id) FROM members WHERE chat_id=={chat_id} AND time_checkin!=0 AND time_joined>{int(time.time()-period*24*60*60)}"
+			sqlite_query = f"SELECT count(id) FROM members WHERE chat_id=={chat_id} AND time_checkin!=0 AND time_joined>{int(time.time())-period*24*60*60}"
 			cursor.execute(sqlite_query)
 			number_checked = cursor.fetchone()
 			
 			# Не прошли проверку за период
-			sqlite_query = f"SELECT count(id) FROM members WHERE chat_id=={chat_id} AND time_checkin==0 AND time_joined>{int(time.time()-period*24*60*60)}"
+			sqlite_query = f"SELECT count(id) FROM members WHERE chat_id=={chat_id} AND time_checkin==0 AND time_joined>{int(time.time())-period*24*60*60}"
 			cursor.execute(sqlite_query)
 			number_kicked = cursor.fetchone()
 
@@ -432,7 +435,7 @@ def statistics_send(chat_id, period=config.statistics_period_days):
 			date_start_bot = time.strftime("%d-%m-%Y", time.localtime(record))
 
 			# Заблокировано за период
-			sqlite_query = f"SELECT count(id) FROM ban WHERE chat_id=={chat_id} AND user_voted_id=={config.bot_id} AND unix_time>{int(time.time()-period*24*60*60)}"
+			sqlite_query = f"SELECT count(id) FROM ban WHERE chat_id=={chat_id} AND user_voted_id=={config.bot_id} AND unix_time>{int(time.time())-period*24*60*60}"
 			cursor.execute(sqlite_query)
 			number_blocked = cursor.fetchone()
 
@@ -514,8 +517,7 @@ def captcha_del_records(chat_id, user_id):
 		# member_raw_data = bot.get_chat_member(message.chat.id, message.from_user.id)
 	# except Exception:
 		# log(f'Ошибка получения данных пользователя {message.from_user.id}', message.chat.id)
-
-	# if 'member_raw_data' in locals():
+	# else:
 		# if not member_raw_data.can_restrict_members and member_raw_data.status != 'creator':	# Если не разрешена блокировка других участников группы и не основатель группы 
 			# log(f'Запрос /raw_command не от администратора группы {member_info(message.from_user)}', message.chat.id, message.id)
 			# text = f'<b>{message.from_user.first_name}</b>, вам не разрешено использовать команду <b>/raw_command</b>'
@@ -524,17 +526,15 @@ def captcha_del_records(chat_id, user_id):
 			# except Exception:
 				# log(f'Ошибка отправки сообщения, /raw_command не разрешен', message.chat.id)
 		# else:																					# Если разрешена блокировка других участников группы или основатель группы
-			# #log(f'{member_info(message.from_user)} отправил запрос {message.text}', message.chat.id, message.id)
-			# #try:
-			# raw_command = message.text.split(' ', 1)[1]
-			# if raw_command.startswith == 'bot.'
-				# print(raw_command)
-				# print(exec(raw_command))
-				# #bot.send_message(message.chat.id, text, parse_mode='html')
-				# #except Exception:
-				# #	log(f'Ошибка выполнения /raw_command', message.chat.id)
-				
-				# print(bot.get_chat_member('-1001541619419', '334581946'))
+			# log(f'{member_info(message.from_user)} отправил запрос {message.text}', message.chat.id, message.id)
+			# try:
+				# raw_command = message.text.split(' ', 1)[1]
+				# if raw_command.startswith == 'bot.'
+					# print(raw_command)
+					# print(exec(raw_command))			# Здесь ДЫРА в безопасности
+					# #bot.send_message(message.chat.id, text, parse_mode='html')
+			# except Exception:
+				# log(f'Ошибка выполнения /raw_command', message.chat.id)
 
 # ======================================================================
 
@@ -672,12 +672,12 @@ def handler_get_stat(message):
 # ============================== /test =================================
 # ---------------- Вывод данных в терминал для отладки -----------------
 
-@bot.message_handler(commands=['test', 'tst'])									# Выполняется, если сообщение содержит команду /test или /tst
+@bot.message_handler(commands=['test'])									# Выполняется, если сообщение содержит команду /test или /tst
 def handler_test(message):
 	if is_group_allowed(message):	# Проверка группы
 		messages_add_new(message)														# Запись в таблицу message
 
-		log(f'Команда /test от {member_info(message.from_user)}', message.chat.id, message.id)
+		log(f'Команда {message.text} от {member_info(message.from_user)}', message.chat.id, message.id)
 
 		limit = 4096	# Максимальная длина сообщения
 		if len(str(message)) > limit:
@@ -858,49 +858,54 @@ def handler_ban(message):
 			except Exception:
 				log(f'Ошибка отправки кнопки Забанить', message.chat.id)
 			else:
-				ban_member(message.chat.id, banned_user_id, user_voted_id=message.from_user.id, time_banned=0) # только голосование за ban
+				ban_member(message.chat.id, banned_user_id, user_voted_id=message.from_user.id, until_time=0) # только голосование за ban
 
 # ======================================================================
 
 
-# ================================ /ban_id =============================
+# =========================== /ban_id /unban_id ========================
 
-@bot.message_handler(commands=['ban_id'])											# Выполняется, если сообщение содержит команду /ban_id
+@bot.message_handler(commands=['ban_id', 'unban_id'])							# Выполняется, если сообщение содержит команду /ban_id или /unban_id
 def handler_ban_id(message):
-	try:																						# Получаем данные участника отправившего запрос mute
+	command = message.text.split()[0] # Содержит ban_id или unban_id
+	log(f'{member_info(message.from_user)} отправил команду {message.text}', message.chat.id, message.id)
+	
+	try:																						# Получаем данные участника отправившего команду /(un)ban_id
 		member_raw_data = bot.get_chat_member(message.chat.id, message.from_user.id)
 	except Exception:
-		log(f'Ошибка получения данных пользователя {message.from_user.id}', message.chat.id)
+		log(f'Ошибка получения данных участника {message.from_user.id}', message.chat.id)
 	else:
-		if not member_raw_data.can_restrict_members and member_raw_data.status != 'creator':	# Если не разрешена блокировка других участников группы и не основатель группы 
-			log(f'Запрос /ban_id не от администратора группы {member_info(message.from_user)}', message.chat.id, message.id)
-			text = f'<b>{message.from_user.first_name}</b>, вам не разрешено использовать команду <b>/ban_id</b>'
+		if member_raw_data.can_restrict_members and member_raw_data.status != 'creator':	# Если не разрешена блокировка других участников группы и не основатель группы 
+			log(f'Команда {command} не от администратора группы {member_info(message.from_user)}', message.chat.id, message.id)
+			text = f'<b>{message.from_user.first_name}</b>, вам не разрешено использовать команду <b>{command}</b>'
 			try:
 				bot.send_message(message.chat.id, text, parse_mode='html')
 			except Exception:
-				log(f'Ошибка отправки сообщения, /ban_id не разрешен', message.chat.id)
+				log(f'Ошибка отправки сообщения, {command} не разрешен', message.chat.id)
 		else:																					# Если разрешена блокировка других участников группы или основатель группы
-			log(f'{member_info(message.from_user)} отправил запрос {message.text}', message.chat.id, message.id)
-
-			ids_to_block = message.text.split(' ')[1:]	# Список id для блокировки
-			if len(ids_to_block) == 0 :
-				text = f'С командой <b>/ban_id</b> не переданы id участников для блокировки'
+			ids_to_block = message.text.split(' ')[1:]	# Список id, переданных с командой /(un)ban_id
+			if len(ids_to_block) == 0:
+				text = f'С командой {command} не переданы id'
 				try:
 					bot.send_message(message.chat.id, text, parse_mode='html')
 				except Exception:
-					log(f'Ошибка отправки сообщения, c /ban_id не переданы id для блокировки', message.chat.id)
+					log(f'Ошибка отправки сообщения, c {command} не переданы id', message.chat.id)
 			else:
-				count_blocked = 0
+				count = 0
 				for id in ids_to_block:
 					if id.isnumeric():
-						check = ban_member(message.chat.id, id, user_voted_id=message.from_user.id)
-						if check: count_blocked += 1
-					time.sleep(3)
+						if command == '/ban_id':
+							ban_member(message.chat.id, id, user_voted_id=message.from_user.id)
+						elif command == '/unban_id':
+							ban_member(message.chat.id, id, user_voted_id=message.from_user.id, until_time=int(time.time())+60)
+						count += 1
+					if count < len(ids_to_block):
+						time.sleep(3)
 
 				try:
-					bot.send_message(message.chat.id, f'Завершено {count_blocked}/{len(ids_to_block)}', parse_mode='html')
+					bot.send_message(message.chat.id, f'Завершено {count}/{len(ids_to_block)}', parse_mode='html')
 				except Exception:
-					log(f'Ошибка отправки сообщения о завершении /ban_id', message.chat.id)
+					log(f'Ошибка отправки сообщения о завершении {command}', message.chat.id)
 
 # ======================================================================
 
@@ -1093,8 +1098,8 @@ def handler_new_chat_members(message):
 				if mfcc >= 5:
 					ban_member(message.chat.id, message.from_user.id)
 				else:
-					time_checkin_restrict = int(time.time() + config.minutes_between_checkin*60)
-					ban_member(message.chat.id, message.from_user.id, time_banned=time_checkin_restrict)
+					time_checkin_restrict = int(time.time()) + config.minutes_between_checkin*60
+					ban_member(message.chat.id, message.from_user.id, until_time=time_checkin_restrict)
 
 			captcha_del_records(message.chat.id, message.from_user.id)		# Удаление последней captcha
 
@@ -1430,7 +1435,7 @@ def handler_callback_query(call):
 				else:
 					log(f'{member_info(call.from_user)} cогласен заблокировать {banned_first_name} {banned_user_id}', call.message.chat.id, call.message.id)
 
-					ban_member(call.message.chat.id, banned_user_id, user_voted_id=call.from_user.id, time_banned=0) # только голосование за ban
+					ban_member(call.message.chat.id, banned_user_id, user_voted_id=call.from_user.id, until_time=0) # только голосование за ban
 
 					inline_button = telebot.types.InlineKeyboardMarkup()		# Изменённая кнопка Забанить
 					inline_button.add(telebot.types.InlineKeyboardButton(f'Забанить {len(list_ban_voted)+1}/{config.members_poll_for_ban}', callback_data=f'ban|||{banned_user_id}|||{banned_first_name}|||{banned_by_message_id}|||{ban_init_time}'))

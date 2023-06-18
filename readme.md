@@ -1,11 +1,19 @@
 # Бот обсуживания группы Telegram
 
+Разработка бота началась с просмотра видео  
+[Гоша Дударь - Telegram Bot на Python / Создания ботов для начинающих за 30 минут](https://youtu.be/HodO2eBEz_8)  
+[Школа itProger - Уроки Python для начинающих / Программирование на Питон с нуля ](https://www.youtube.com/playlist?list=PLDyJYA6aTY1lPWXBPk0gw6gR8fEtPDGKa)  
+и прочтения книги **Простой Python. Современный стиль программирования** - *Билл Любанович*
+
 Бот подходит для небольших групп со средней активностью  
-Основан на [pyTelegramBotAPI](https://pypi.org/project/pyTelegramBotAPI) (режим **синхронный**, тип опроса **polling**)  
+Основан на [pyTelegramBotAPI](https://pypi.org/project/pyTelegramBotAPI) (режим **синхронный**, метод опроса [polling](https://docs-python.ru/packages/biblioteka-python-telegram-bot-python/ispolzovanie-webhook))  
 Проверен на [Python 3.10.6](https://www.python.org) и [Ubuntu Server 22.04](https://ubuntu.com/download/server)  
 
 Подробное описание функционала в файле [description.md](description.md) и на [форуме UNI](https://uni3d.store/viewtopic.php?t=1090)  
-Группа для тестов [unitestgroup](https://t.me/unitestgroup)
+
+Для тестирования бот можно запустить даже на домашнем ноутбуке, статический и белый IP не требуются  
+Для полноценного использования лучше использовать [VPS](https://ru.wikipedia.org/wiki/VPS)   
+Бот подключен для тестов к Telegram группе [unitestgroup](https://t.me/unitestgroup)
 
 ## Установка
 
