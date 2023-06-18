@@ -1,8 +1,8 @@
 # Бот обсуживания группы Telegram
 
-[Подробное описание функционала](https://uni3d.store/viewtopic.php?t=1090)  
-Проверен с [Python 3.10.6](https://www.python.org)  
-Основан на [pyTelegramBotAPI](https://pypi.org/project/pyTelegramBotAPI)
+Подробное описание функционала на [форуме UNI](https://uni3d.store/viewtopic.php?t=1090)  
+Основан на [pyTelegramBotAPI](https://pypi.org/project/pyTelegramBotAPI)  
+Проверен на [Python 3.10.6](https://www.python.org) и [Ubuntu Server 22.04](https://ubuntu.com/download/server)  
 
 ## Установка
 
@@ -10,10 +10,8 @@
 `sudo apt install python3-pip python3-venv`
 
 2. Создайте и перейдите в каталог, например **bot**  
-```
-mkdir bot  
-cd bot
-```
+`mkdir bot`  
+`cd bot`
 
 3. Создайте и активируйте окружение **python_env**  
 `python3 -m venv python_env`  
@@ -25,9 +23,9 @@ cd bot
 5. Установите дополнительные библиотеки для работы модуля [multicolorcaptcha](https://pypi.org/project/multicolorcaptcha)  
 `sudo apt install libtiff5-dev libjpeg8-dev zlib1g-dev libfreetype6-dev liblcms2-dev libwebp-dev tcl8.6-dev tk8.6-dev python3-tk`
 
-6. Проверьте параметры в файле **config.py**
+6. Задайте параметры в файле **config.py**
 
-7. Для создания миниатюр моделей **STL** используются [minirender](https://github.com/aslze/minirender)  
+7. Для создания миниатюр моделей **STL** используется [minirender](https://github.com/aslze/minirender).  
 Установите **gmsh** для создания миниатюр моделей **STEP** через конвертирование в **STL**.  
 `sudo apt install gmsh`  
 
@@ -36,25 +34,26 @@ cd bot
 1. Перейдите в каталог бота  
 `cd bot`
 
-2.1. Активируйте окружние и запустите сценарий **bot.py**  
-```source python_env/bin/activate
-python3 bot.py```  
+2. Активируйте окружние и запустите сценарий **bot.py**  
+`source python_env/bin/activate`  
+`python3 bot.py` 
 
-2.2. Для запуска сценария без активации окружения  
+Для запуска сценария без активации окружения  
 `python_env/bin/python3 bot.py`
 
-2.3. Для постоянной работы лучше запустить бота, как сервис
+## Запуск в качестве сервиса systemd
 
-2.3.1. Создайте файл сервиса   
-`nano /lib/systemd/system/bot.service`
-
+1. Создайте файл сервиса **bot.service**  
+`nano /lib/systemd/system/bot.service`  
+Вместо **/home/<user_name>/bot/** задайте корректный путь к файлу сценария.
+  
 ```
 [Unit]
   Description=bot
  
 [Service]
-  WorkingDirectory=/home/<username>/bot
-  ExecStart=/home/<username>/bot/python_env/bin/python3 /home/<username>/bot/bot.py
+  WorkingDirectory=/home/<user_name>/bot
+  ExecStart=/home/<user_name>/bot/python_env/bin/python3 /home/<user_name>/bot/bot.py
   Type=simple
   KillMode=process
  
@@ -66,12 +65,16 @@ python3 bot.py```
   RestartSec=10s
 [Install]
   WantedBy=network-online.target
-```
+```  
 
-2.3.2. Обновите список сервисов и запустите сервис **bot**  
-```systemctl daemon-reload
-systemctl start bot
-systemctl enable bot```
+2. Обновите список сервисов **systemd** и запустите сервис **bot**  
+```
+sudo systemctl daemon-reload
+sudo systemctl start bot
+sudo systemctl enable bot
+```  
+Для перезапуска сценария выполните команду  
+`sudo systemctl restart bot`
 
 ## Мониторинг
 
