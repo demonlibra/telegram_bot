@@ -768,9 +768,7 @@ def handler_help(message):
 
 		text = (
 			f"Чтобы заблокировать негодяя, ответьте на его сообщение"
-			f" текстом <b>@ban</b>, <b>/ban</b> или <b>bban</b>"
-			f"\nПодробнее о боте читайте в"
-			f" <a href='https://uni3d.store/viewtopic.php?t=1090'>теме форума</a>.")
+			f" текстом <b>@ban</b>, <b>/ban</b> или <b>bban</b>")
 		try:																					
 			bot.send_message(message.chat.id, text, parse_mode='html', reply_markup=inline_buttons)
 		except Exception:
@@ -786,12 +784,13 @@ def handler_audio_messages(message):
 	if is_group_allowed(message):	# Проверка группы
 		messages_add_new(message)														# Запись в таблицу message
 
-		try:
-			bot.delete_message(message.chat.id, message.id)						# Удалить голосовое сообщение
-		except Exception:
-			log(f'Ошибка удаления аудио сообщения {message.id}', message.chat.id, message.id)
-		else:
-			log(f'Удалено аудио сообщение {message.id} от {member_info(message.from_user)}', message.chat.id, message.id)
+		if config.delete_audio_message:
+			try:
+				bot.delete_message(message.chat.id, message.id)						# Удалить голосовое сообщение
+			except Exception:
+				log(f'Ошибка удаления аудио сообщения {message.id}', message.chat.id, message.id)
+			else:
+				log(f'Удалено аудио сообщение {message.id} от {member_info(message.from_user)}', message.chat.id, message.id)
 
 # ======================================================================
 
@@ -1045,9 +1044,9 @@ def handler_new_chat_members(message):
 			text = (
 				f'<b>{message.from_user.first_name}</b>{username},'
 				f' с целью защиты от спама необходимо пройти проверку. '
-				f'Введите адрес <b>интернет магазина</b> или <b>форума UNI.</b>'
-				f'\n\nЧерез 3 минуты Вы будете исключены из группы. '
-				f'Повторная попытка будет возможна через 5 минут.'
+				f'{config.checkin_text}'
+				f'\n\nЧерез {config.minutes_for_checkin} минуты Вы будете исключены из группы. '
+				f'Повторная попытка будет возможна через {config.minutes_between_checkin} минут.'
 				f'\n\nНеобходимую информацию можно найти в описании группы '
 				f'или отправив команду /help'
 				f'\nДля проверки по изображению отправьте команду /captcha')
@@ -1077,8 +1076,8 @@ def handler_new_chat_members(message):
 					text = (
 						f'<b>{message.from_user.first_name}</b>{username}'
 						f', проверка пройдена. '
-						f'Добро пожаловать в <b>официальную группу 3d принтеров UNI.</b>'
-						f' Правила простые, в любой ситуации оставаться <b>Человеком.</b>'
+						f'Добро пожаловать в группу <b>{message.chat.title}</b>.'
+						f' Правила простые, в любой ситуации оставаться <b>Человеком</b>.'
 						f' Для получения дополнительной информации отправьте команду /help')
 					try:
 						bot.send_message(message.chat.id, text, parse_mode='html') # Отправка сообщения подтверждения проверки
@@ -1197,7 +1196,7 @@ def handler_messages(message):
 
 		else:		# Если участник НЕ проходит проверку
 
-# --------------------------- Фильтр спама -----------------------------
+# -------------- Фильтр спама с блокировкой участника ------------------
 
 			for spam_marker in spam_set:
 				if (spam_marker in str(message.text).casefold()
@@ -1232,7 +1231,7 @@ def handler_messages(message):
 					text = (
 						f'<b>{message.from_user.first_name}</b>{username}'
 						f', пожалуйста, не ругайтесь.'
-						f'\nДля получения текста Вашего сообщения, откройте чат с ботом @d_uni3d_bot и отправьте команду <b>/cens</b>')
+						f'\nДля получения текста Вашего сообщения, откройте чат с ботом и отправьте команду <b>/cens</b>')
 					try:
 						bot.reply_to(message, text, parse_mode='html', disable_web_page_preview=True)
 					except Exception:
@@ -1243,15 +1242,26 @@ def handler_messages(message):
 					except Exception:
 						log(f'Ошибка удаления ругательного сообщения', message.chat.id, message.id)
 
-# ---------------------------- Фильтр br3d -----------------------------
+# ------- Фильтр для удаления сообщений без блокировки участника -------
 
-				elif (re.search(r'(?i)((\bb&r\b)|(br3d))', str(message.text).casefold())
-				or re.search(r'(?i)((\bb&r\b)|(br3d))', str(message.caption).casefold())):
-					log(f'Упоминание br3d в сообщении от {member_info(message.from_user)}', message.chat.id, message.id)
-					try:
-						bot.delete_message(message.chat.id, message.id)					# Удалить сообщение br3d
-					except Exception:
-						log(f'Ошибка удаления сообщения br3d {message.id}', message.chat.id, message.id)
+				for pattern in config.markers_to_delete:
+					if pattern:
+						marker_find_text = re.search(pattern, str(message.text).casefold())
+						marker_find_caption = re.search(pattern, str(message.caption).casefold())
+
+						marker = False
+						if marker_find_text:
+							marker =  marker_find_text.group(0)
+						if marker_find_caption:
+							marker =  marker_find_caption.group(0)
+
+						if marker:
+							log(f'Упоминание -{marker}- от {member_info(message.from_user)}', message.chat.id, message.id)
+							try:
+								bot.delete_message(message.chat.id, message.id)
+							except Exception:
+								log(f'Ошибка удаления сообщения {message.id} с меткой -{marker}-', message.chat.id, message.id)
+							break
 
 # ----------------------- Безымянные участники -------------------------
 
@@ -1310,18 +1320,21 @@ def handler_messages(message):
 # ---------------- Отправка ссылок по ключевым фразам ------------------
 					
 					for marker in config.markers_links:
-						pattern = marker[0]
-						url = marker[1]
-						marker_find = re.search(pattern, message.text.casefold())
-						if (marker_find
-						and (url not in str(message.text).casefold())
-						and ((log_marker_last_id(message.chat.id, url) < message.id - config.can_repeat_info))):
-							log(f'Запрос {url} от {member_info(message.from_user)}', message.chat.id, message.id)
-							text = marker[2]
-							try:
-								bot.send_message(message.chat.id, text, parse_mode='html', disable_web_page_preview=True)
-							except Exception:
-								log(f'Ошибка отправки сообщения по запросу {url}', message.chat.id, message.id)
+						if marker:
+							pattern = marker[0]
+							url = marker[1]
+							marker_find_text = re.search(pattern, str(message.text).casefold())
+							marker_find_caption = re.search(pattern, str(message.caption).casefold())
+							if ((marker_find_text or marker_find_caption)
+							and (url not in str(message.text).casefold())
+							and (url not in str(message.caption).casefold())
+							and ((log_marker_last_id(message.chat.id, url) < message.id - config.can_repeat_info))):
+								log(f'Запрос {url} от {member_info(message.from_user)}', message.chat.id, message.id)
+								text = marker[2]
+								try:
+									bot.send_message(message.chat.id, text, parse_mode='html', disable_web_page_preview=True)
+								except Exception:
+									log(f'Ошибка отправки сообщения по запросу {url}', message.chat.id, message.id)
 
 # ----------------------- Обработка STL и STEP -------------------------
 

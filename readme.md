@@ -1,8 +1,11 @@
 # Бот обсуживания группы Telegram
 
-Подробное описание функционала в файла [description.md](description.md) на [форуме UNI](https://uni3d.store/viewtopic.php?t=1090)  
-Основан на [pyTelegramBotAPI](https://pypi.org/project/pyTelegramBotAPI)  
+Бот подходит для небольших групп со средней активностью  
+Основан на [pyTelegramBotAPI](https://pypi.org/project/pyTelegramBotAPI) (режим **синхронный**, тип опроса **polling**)  
 Проверен на [Python 3.10.6](https://www.python.org) и [Ubuntu Server 22.04](https://ubuntu.com/download/server)  
+
+Подробное описание функционала в файле [description.md](description.md) и на [форуме UNI](https://uni3d.store/viewtopic.php?t=1090)  
+Группа для тестов [unitestgroup](https://t.me/unitestgroup)
 
 ## Установка
 
@@ -45,7 +48,7 @@
 
 1. Создайте файл сервиса **bot.service**  
 `nano /lib/systemd/system/bot.service`  
-Вместо **/home/<user_name>/bot/** задайте корректный путь к файлу сценария.
+
   
 ```
 [Unit]
@@ -67,13 +70,19 @@
   WantedBy=network-online.target
 ```  
 
+Вместо **/home/<user_name>/bot/** задайте корректный путь к файлу сценария.
+
 2. Обновите список сервисов **systemd** и запустите сервис **bot**  
-```
-sudo systemctl daemon-reload
-sudo systemctl start bot
-sudo systemctl enable bot
-```  
-Для перезапуска сценария выполните команду  
+`sudo systemctl daemon-reload`  
+`sudo systemctl start bot`
+
+Для проверки состояния сервиса выполните команду  
+`sudo systemctl status bot`
+
+Для автоматического запуска сервиса после перезагрузки системы выполните команду  
+`sudo systemctl enable bot`
+
+Для перезапуска сервиса выполните команду  
 `sudo systemctl restart bot`
 
 ## Мониторинг
