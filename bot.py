@@ -32,7 +32,7 @@ def run_Bot():
 # ------------------- Поток 2 - Задачи по расписанию -------------------
 def run_Schedulers():																		
 	schedule.every().sunday.at(config.statistics_time_send).\
-		do(statistics_send, chat_id=config.chats_id[0])							# Отправка статистики в группу UNI
+		do(statistics_send, chat_id=config.chats_id[0])							# Отправка статистики
 	
 	schedule.every().monday.at(config.db_time_clean).\
 		do(db_clean)																		# Очистка базы данных
@@ -166,9 +166,17 @@ def is_group_allowed(message, type=None):
 			bot.leave_chat(message.chat.id) 											# Выход из чужой группы
 		except Exception:
 			log(f'Ошибка выхода из группы', message.chat.id)
-				
+		
+		try:			
+			bot_raw_data = bot.get_chat_member(message.chat.id, config.bot_id)	# Получение данных бота
+		except Exception:
+			bot_name = config.bot_id
+			log(f'Ошибка получения данных бота {config.bot_id}', message.chat.id, message.id)
+		else:
+			bot_name = bot_raw_data.user.username
+
 		text = (
-			f'Обнаружено присутствие бота <b>@d_uni3d_bot</b> '
+			f'Обнаружено присутствие бота <b>@{bot_name}</b> '
 			f'в чужой группе\n{message.chat.id}\n{message.chat.username}')
 		try:
 			bot.send_message(config.admins_id[0], text, parse_mode='html')	# Отправка уведомления админу
@@ -538,7 +546,7 @@ def handler_cens(message):
 	global censured_list
 	if is_group_allowed(message, 'handler_cens'):
 		if message.from_user.id != message.chat.id:
-			text = f"Команду /cens можно отправлять только лично боту @d_uni3d_bot"
+			text = f"Команду /cens можно отправлять только лично боту"
 			try:
 				bot.send_message(message.chat.id, text, parse_mode='html')
 			except Exception:
@@ -743,7 +751,7 @@ def handler_member_id(message):
 # ============================== /help =================================
 # --------------------------- Вывод ссылок -----------------------------
 
-@bot.message_handler(regexp=r'(?i)\A((\/|@|h)h(e?)lp|(\/|@|s)st(a?)rt|(\/|@|i)inf|(\/|@|u)uni(3d|)|(\/|@|ю)юни)\b')# Выполняется, если начало сообщения содержит команды (без учёта регистра)
+@bot.message_handler(regexp=r'(?i)\A((\/|@|h)h(e?)lp|(\/|@|s)st(a?)rt|(\/|@|i)inf(o|))\b')# Выполняется, если начало сообщения содержит команды
 def handler_help(message):
 	if is_group_allowed(message, 'handler_help'):								# Проверка группы
 		messages_add_new(message)														# Запись в таблицу message
@@ -1300,81 +1308,20 @@ def handler_messages(message):
 									log(f'Ошибка удаления сообщения aliexpress {message.id}', message.chat.id, message.id)
 
 # ---------------- Отправка ссылок по ключевым фразам ------------------
-
-					# Ссылка на форум
-					marker = 'форум'
-					url = 'uni3d.store'
-					if ((marker in str(message.text).casefold() or marker in str(message.caption).casefold())
-					and not (url in str(message.text).casefold() or url in str(message.caption).casefold())
-					and (log_marker_last_id(message.chat.id, '-Форум uni-') < message.id - config.can_repeat_info)):
-						log(f'Запрос -Форум uni- от {member_info(message.from_user)}', message.chat.id, message.id)
-						text = f'<a href="https://uni3d.store">Форум uni3d.store</a>'
-						try:
-							bot.send_message(message.chat.id, text, parse_mode='html', disable_web_page_preview=True)
-						except Exception:
-							log(f'Ошибка отправки ссылки на форум UNI', message.chat.id)
-
-					# Ссылка на интернет магазин
-					url = 'uni-3d.ru'
-					if (re.search(r'(?i)(сайт(.|..|)(uni|юни))|((uni|юни)(.|)сайт)|(магазин(.|..|)(uni|юни))|((uni|юни)(.|..|)(интернет|магазин))', str(message.text).casefold()) \
-					or re.search(r'(?i)(сайт(.|..|)(uni|юни))|((uni|юни)(.|)сайт)|(магазин(.|..|)(uni|юни))|((uni|юни)(.|..|)(интернет|магазин))', str(message.caption).casefold())) \
-					and not (url in str(message.text).casefold() or url in str(message.caption).casefold()) \
-					and (log_marker_last_id(message.chat.id, '-Сайт uni-') < message.id - config.can_repeat_info):
-						log(f'Запрос -Сайт uni- от {member_info(message.from_user)}', message.chat.id, message.id)
-						text = f'<a href="https://uni-3d.ru">Сайт uni-3d.ru</a>'
-						try:
-							bot.send_message(message.chat.id, text, parse_mode='html')
-						except Exception:
-							log(f'Ошибка отправки ссылки на сайт UNI', message.chat.id)
-
-					# Ссылка на облако
-					url = 'cloud.uni3d.store'
-					if (re.search(r'(?i)\bоблак(о|е)\b', str(message.text).casefold()) \
-					or re.search(r'(?i)\bоблак(о|е)\b', str(message.caption).casefold())) \
-					and not (url in str(message.text).casefold() or url in str(message.caption).casefold()) \
-					and (log_marker_last_id(message.chat.id, '-Облако uni-') < message.id - config.can_repeat_info):
-						log(f'Запрос -Облако uni- от {member_info(message.from_user)}', message.chat.id, message.id)
-						text = f'<a href="https://cloud.uni3d.store/s/files">Облако UNI</a>'
-						try:
-							bot.send_message(message.chat.id, text, parse_mode='html', disable_web_page_preview=True)
-						except Exception:
-							log(f'Ошибка отправки ссылки на облако UNI', message.chat.id)
-
-					# Ссылки 3d-club.ru
-					url = '3d-club.ru'
-					if (re.search(r'(?i)(\bсоветова\b|sovetov|3д(|-)кл(а|у)б|3d(|-)club)', str(message.text).casefold()) \
-					or re.search(r'(?i)(\bсоветова\b|sovetov|3д(|-)кл(а|у)б|3d(|-)club)', str(message.caption).casefold())) \
-					and not (url in str(message.text).casefold() or url in str(message.caption).casefold()) \
-					and (log_marker_last_id(message.chat.id, 'Запрос -3d-club-') < message.id - config.can_repeat_info):
-						log(f'Запрос -3d-club- от {member_info(message.from_user)}', message.chat.id, message.id)
-						text = (
-							f'<b>Филамент 3D Club</b>'
-							f'\n<a href="https://3d-club.ru/product-category/filament/">3d-club.ru</a>'
-							f' Санкт-Петербург'
-							f'\n<a href="https://uni-3d.ru/catalog/filament-dlya-3d-printera/">uni-3d.ru</a>'
-							f' Южный Урал')
-						try:
-							bot.send_message(message.chat.id, text, parse_mode='html', disable_web_page_preview=True)
-						except Exception:
-							log(f'Ошибка отправки ссылки на 3d-club', message.chat.id)
-
-					# Voron
-					if (re.search(r'(?i)(\bvoron\b|\bворон(а|)\b)', str(message.text).casefold()) \
-					or re.search(r'(?i)(\bvoron\b|\bворон(а|)\b)', str(message.caption).casefold())) \
-					and not 'aliexpress' in str(message.text).casefold() \
-					and (log_marker_last_id(message.chat.id, 'Voron') < message.id - config.can_repeat_info) \
-					and False:
-						log(f'Упоминание Voron в сообщении от {member_info(message.from_user)}', message.chat.id, message.id)
-						random = int(str(time.time_ns())[-1])	# Случайное число от 0 до 9 из таймера
-						if random > 4:
-							text = f'Дорогая поделка европейских дизайнеров со странными техническим решениями'
-						else:
-							text = f'Тот случай, когда смогли только дизайн'
-						#text += '<a href="https://uni-3d.ru/catalog/3d-printery/"><b>принтер UNI</b></a>'
-						try:
-							bot.reply_to(message, text, parse_mode='html', disable_web_page_preview=True)
-						except Exception:
-							log(f'Ошибка отправки ответа Voron для {member_info(message.from_user)}', message.chat.id)	
+					
+					for marker in config.markers_links:
+						pattern = marker[0]
+						url = marker[1]
+						marker_find = re.search(pattern, message.text.casefold())
+						if (marker_find
+						and (url not in str(message.text).casefold())
+						and ((log_marker_last_id(message.chat.id, url) < message.id - config.can_repeat_info))):
+							log(f'Запрос {url} от {member_info(message.from_user)}', message.chat.id, message.id)
+							text = marker[2]
+							try:
+								bot.send_message(message.chat.id, text, parse_mode='html', disable_web_page_preview=True)
+							except Exception:
+								log(f'Ошибка отправки сообщения по запросу {url}', message.chat.id, message.id)
 
 # ----------------------- Обработка STL и STEP -------------------------
 
