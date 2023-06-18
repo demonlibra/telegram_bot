@@ -1,6 +1,6 @@
 # Бот обсуживания группы Telegram
 
-Подробное описание функционала на [форуме UNI](https://uni3d.store/viewtopic.php?t=1090)  
+Подробное описание функционала в файла [description.md](description.md) на [форуме UNI](https://uni3d.store/viewtopic.php?t=1090)  
 Основан на [pyTelegramBotAPI](https://pypi.org/project/pyTelegramBotAPI)  
 Проверен на [Python 3.10.6](https://www.python.org) и [Ubuntu Server 22.04](https://ubuntu.com/download/server)  
 
