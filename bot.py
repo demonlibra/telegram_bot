@@ -15,6 +15,7 @@ import sqlite3																				# Библиотека базы данных S
 import os
 import sys
 import string
+import subprocess
 
 from multicolorcaptcha import CaptchaGenerator									# https://pypi.org/project/multicolorcaptcha/
 
@@ -331,10 +332,11 @@ def member_set_checked(chat_id, user_id):
 
 # -------- Блокировка участника и вставка данных в таблицу ban ---------
 def ban_member(chat_id, user_banned_id, until_time=int(time.time())+config.ban_days*24*60*60, user_voted_id=config.bot_id):
-	if until_time >= int(time.time())+(config.ban_days-1)*24*60*60:
+	if until_time >= (int(time.time())+(config.ban_days-1)*24*60*60):
 		ban_forever = True
 	else:
 		ban_forever = False
+	log(f'user_banned_id={user_banned_id}, ban_forever={ban_forever}, time={until_time-int(time.time())}')
 
 	if until_time != 0:	# Блокировать участника, только если это НЕ голосование
 		try:
@@ -1386,20 +1388,18 @@ def handler_messages(message):
 									log(f'Файл stl подозрительно маленький ({os.stat(full_path_stl).st_size} байт)', message.chat.id)
 								else:
 									full_path_png = os.path.join(path_dir_models3d, f'{file_name[:file_name.rfind(".")]}.png')
-									command = f'{config.path_full_minirender} -o -- -tilt 30 -yaw 20 -w {config.preview_resolution} -h {config.preview_resolution} "{full_path_stl}" | convert - "{full_path_png}"'
-									os.system(command)
-
-									if os.stat(full_path_png).st_size > 500:
-										with open(full_path_png, "rb") as file:
-											try:
-												bot.send_document(message.chat.id, document=file, visible_file_name=f'{file_name[:file_name.rfind(".")]}.png') # Отправка как файла (более компактно)
-												#bot.send_photo(message.chat.id, file, caption=file_name) # Отправка как фото
-											except Exception:
-												log(f'Ошибка отправки превью stl файла {file_name}', message.chat.id)
+									command = f'{path_full_minirender} -o -- -tilt 30 -yaw 20 -w {config.preview_resolution} -h {config.preview_resolution} "{full_path_stl}" | convert - png:-'
+									image = subprocess.check_output(command, shell=True)
+									
+									if sys.getsizeof(image) > 500:
+										try:
+											bot.send_document(message.chat.id, document=image, visible_file_name=f'{file_name[:file_name.rfind(".")]}.png') # Отправка как файла (более компактно)
+											#bot.send_photo(message.chat.id, file, caption=image) # Отправка как фото
+										except Exception:
+											log(f'Ошибка отправки превью stl файла {file_name}', message.chat.id)
 										
 										# Удаление файлов STL и PNG
 										os.remove(full_path_stl)
-										os.remove(full_path_png)
 
 # ======================================================================
 
