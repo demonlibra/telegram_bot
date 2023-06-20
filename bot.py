@@ -1382,24 +1382,26 @@ def handler_messages(message):
 								os.remove(full_path_model3d)										# Удаление файла STEP
 
 							if not os.path.exists(full_path_stl):
-								log(f'Не найден файл {full_path_stl}', message.chat.id)
+								log(f'Не найден файл {full_path_stl}', message.chat.id, message.id)
 							else:
 								if os.stat(full_path_stl).st_size < 100:
-									log(f'Файл stl подозрительно маленький ({os.stat(full_path_stl).st_size} байт)', message.chat.id)
+									log(f'Файл stl подозрительно маленький ({os.stat(full_path_stl).st_size} байт)', message.chat.id, message.id)
 								else:
-									full_path_png = os.path.join(path_dir_models3d, f'{file_name[:file_name.rfind(".")]}.png')
 									command = f'{path_full_minirender} -o -- -tilt 30 -yaw 20 -w {config.preview_resolution} -h {config.preview_resolution} "{full_path_stl}" | convert - png:-'
 									image = subprocess.check_output(command, shell=True)
 									
-									if sys.getsizeof(image) > 500:
+									if sys.getsizeof(image) < 500:
+										log(f'Ошибка создания превью файла {file_name}', message.chat.id, message.id)
+									else:
 										try:
 											bot.send_document(message.chat.id, document=image, visible_file_name=f'{file_name[:file_name.rfind(".")]}.png') # Отправка как файла (более компактно)
 											#bot.send_photo(message.chat.id, file, caption=image) # Отправка как фото
 										except Exception:
-											log(f'Ошибка отправки превью stl файла {file_name}', message.chat.id)
-										
-										# Удаление файлов STL и PNG
-										os.remove(full_path_stl)
+											log(f'Ошибка отправки превью файла {file_name}', message.chat.id, message.id)
+										else:
+											log(f'Отправлено превью файла {file_name}', message.chat.id, message.id)
+											# Удаление файлов STL и PNG
+											os.remove(full_path_stl)
 
 # ======================================================================
 
