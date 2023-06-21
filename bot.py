@@ -1070,28 +1070,28 @@ def handler_new_chat_members(message):
 			while time_left > 0:
 				time.sleep(1)
 				time_left -= 1
-				if not new_member in new_members_list: 							# Если новый участник был удалён в другой функции
-					#log(f'Прервано ожидание {time_left}/{config.minutes_for_checkin*60} проверки нового участника {member_info(message.from_user)}', message.chat.id)
+				# Если новый участник был удалён в другой функции или прошёл проверку
+				if (new_member not in new_members_list) or (new_member['checked'] == 1): 
 					break
-				elif new_member['checked'] == 1: 									# Новый участник прошёл проверку
-					member_set_checked(message.chat.id, message.from_user.id)
-					new_members_list.remove(new_member)
-					#log(f'Остановлено ожидание {time_left}/{config.minutes_for_checkin*60} проверки нового участника {member_info(message.from_user)}', message.chat.id)
-					if message.from_user.username:
-						username = f' (@{message.from_user.username})'
-					else: username = ''
-					text = (
-						f'<b>{message.from_user.first_name}</b>{username}'
-						f', проверка пройдена. '
-						f'Добро пожаловать в группу <b>{message.chat.title}</b>.'
-						f' Правила простые, в любой ситуации оставаться <b>Человеком</b>.'
-						f' Для получения дополнительной информации отправьте команду /help')
-					try:
-						bot.send_message(message.chat.id, text, parse_mode='html') # Отправка сообщения подтверждения проверки
-						log(f'Новый участник прошёл проверку {member_info(message.from_user)}', message.chat.id)
-					except Exception:
-						log(f'Ошибка отправки сообщения об успешной проверке нового участника', message.chat.id)
-					break
+
+			if	(new_member in new_members_list) and (new_member['checked'] == 1):
+				member_set_checked(message.chat.id, message.from_user.id)
+				new_members_list.remove(new_member)
+				if message.from_user.username:
+					username = f' (@{message.from_user.username})'
+				else: username = ''
+				text = (
+					f'<b>{message.from_user.first_name}</b>{username}'
+					f', проверка пройдена. '
+					f'Добро пожаловать в группу <b>{message.chat.title}</b>.'
+					f' Правила простые, в любой ситуации оставаться <b>Человеком</b>.'
+					f' Для получения дополнительной информации отправьте команду /help')
+				try:
+					bot.send_message(message.chat.id, text, parse_mode='html') # Отправка сообщения подтверждения проверки
+				except Exception:
+					log(f'Ошибка отправки сообщения об успешной проверке нового участника', message.chat.id)
+				else:
+					log(f'Новый участник прошёл проверку {member_info(message.from_user)}', message.chat.id)
 
 			if (new_member in new_members_list) and (new_member['checked'] == 0): # Если новый участник не успел пройти проверку
 				new_members_list.remove(new_member)
