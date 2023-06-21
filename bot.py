@@ -1065,14 +1065,13 @@ def handler_new_chat_members(message):
 			
 			member_add_new(message.chat.id, message.new_chat_members[0].id, message.date)	# Заносим данные о новом пользователя, как можно раньше
 
-			# Периодический опрос, не прошёл ли новый участник проверку через handler_messages
-			time_left = config.minutes_for_checkin * 60
-			while time_left > 0:
-				time.sleep(1)
-				time_left -= 1
-				# Если новый участник был удалён в другой функции или прошёл проверку
+			# Периодический опрос, не прошёл ли новый участник проверку через содержимое списка new_members_list
+			time_check_end = time.monotonic() + config.minutes_for_checkin * 60
+			while time.monotonic() < time_check_end:
+				# Если новый участник удалён за спам или прошёл проверку 
 				if (new_member not in new_members_list) or (new_member['checked'] == 1): 
 					break
+				else: time.sleep(1)
 
 			if	(new_member in new_members_list) and (new_member['checked'] == 1):
 				member_set_checked(message.chat.id, message.from_user.id)
