@@ -1090,7 +1090,7 @@ def handler_new_chat_members(message):
 				except Exception:
 					log(f'Ошибка отправки сообщения об успешной проверке нового участника', message.chat.id)
 				else:
-					log(f'Новый участник прошёл проверку {member_info(message.from_user)}', message.chat.id)
+					log(f'Новый участник {member_info(message.from_user)} прошёл проверку', message.chat.id)
 
 			if (new_member in new_members_list) and (new_member['checked'] == 0): # Если новый участник не успел пройти проверку
 				new_members_list.remove(new_member)
