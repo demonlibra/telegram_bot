@@ -44,11 +44,7 @@ def run_Schedulers():
 
 # -------------------- Получение абсолютного пути ----------------------
 def get_full_path(path):
-	if path.startswith('/'):	# Если передан абсолютный путь
-		full_path = path
-	else:								# Если передан относительный путь
-		path_to_bot = os.path.dirname(__file__)
-		full_path = os.path.join(path_to_bot, path)
+	full_path = os.path.abspath(path)
 	if	os.path.exists(full_path):
 		return full_path
 	else:
@@ -80,7 +76,7 @@ def log(log_text, chat_id=False, message_id=False):
 	time_marker = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 	print(f'\n{time_marker} {log_text}')											# Вывод сообщения в консоль
 
-	with open (path_full_log, 'a') as file:										# Запись сообщения в файл 
+	with open (path_log, 'a') as file:										# Запись сообщения в файл 
 		if chat_id:
 			file.write(f'\n{time_marker} {log_text} в группе {chat_id}')
 		else:
@@ -89,7 +85,7 @@ def log(log_text, chat_id=False, message_id=False):
 	table_name = 'log'
 	sqlite_query = f"INSERT INTO {table_name} (chat_id, message_id, log_text, unix_time) VALUES ({chat_id}, {message_id}, '{log_text}', {int(time.time())})"
 	try:																						# Запись сообщения в базу данных 
-		with sqlite3.connect(path_full_db) as sqlite_connection:
+		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 			cursor.execute(sqlite_query)
 	except sqlite3.Error as error:
@@ -106,7 +102,7 @@ def log_marker_last_id(chat_id, marker):
 	table_name = 'log'
 	sqlite_query = f"SELECT max(message_id) FROM {table_name} WHERE chat_id=={chat_id} AND log_text LIKE '%{marker}%'"
 	try:
-		with sqlite3.connect(path_full_db) as sqlite_connection:
+		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 			cursor.row_factory = lambda cursor, row: row[0]	# Вывод только первого элемента вместо кортежа
 			cursor.execute(sqlite_query)
@@ -190,7 +186,7 @@ def is_group_allowed(message, type=None):
 # ---------------------------- База данных -----------------------------
 def db_initialization():
 	try:
-		with sqlite3.connect(path_full_db) as sqlite_connection:
+		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 
 			# Создание таблицы messages, если отсутствует
@@ -230,32 +226,32 @@ def db_initialization():
 			cursor.execute(sqlite_create_table_query)
 
 	except sqlite3.Error as error:
-		log(f'Ошибка подключения базы данных {path_full_db} {error}')
+		log(f'Ошибка подключения базы данных {path_db} {error}')
 	else:
-		log(f'Подключена база данных {path_full_db}')
+		log(f'Подключена база данных {path_db}')
 
 # ----------------------- Очистка базы данных --------------------------
 def db_clean():
 	db_delete_old_data('log', 'unix_time', 365)
 	
-	size_before_clean = os.path.getsize(path_full_db)
+	size_before_clean = os.path.getsize(path_db)
 	try:
-		with sqlite3.connect(path_full_db) as sqlite_connection:
+		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 			sqlite_query = f'VACUUM'
 			cursor.execute(sqlite_query)
-		size_difference = size_before_clean - os.path.getsize(path_full_db)
+		size_difference = size_before_clean - os.path.getsize(path_db)
 	except sqlite3.Error as error:
 		log(f'Ошибка очистки базы данных {error}')
 	else:
-		log(f'Выполнена очистка (-{size_difference} байт) базы данных {path_full_db}')
+		log(f'Выполнена очистка (-{size_difference} байт) базы данных {path_db}')
 
 # ------------------ Удаление старых строк из таблицы ------------------
 def db_delete_old_data(table, time_field, days2del):							# (<имя_таблицы>, <имя_поля_временной_метки>, <удалять_записи_старше_дней>)
 	unix_time = int(time.time()) - (days2del * 24 * 60 * 60)
 	sqlite_query = f'DELETE FROM {table} WHERE {time_field}<{unix_time}'
 	try:
-		with sqlite3.connect(path_full_db) as sqlite_connection:
+		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 			cursor.execute(sqlite_query)
 			number_deleted = cursor.rowcount
@@ -270,7 +266,7 @@ def member_add_new(chat_id, user_id, time_joined):
 	table_name = 'members'
 	sqlite_query = f"INSERT INTO {table_name} (chat_id, user_id, time_joined) VALUES ({chat_id}, {user_id}, {time_joined})"
 	try:
-		with sqlite3.connect(path_full_db) as sqlite_connection:
+		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 			cursor.execute(sqlite_query)
 	except sqlite3.Error as error:
@@ -281,7 +277,7 @@ def member_checkin(chat_id, user_id):
 	table_name = 'members'
 	sqlite_query = f"SELECT time_checkin, time_joined FROM {table_name} WHERE chat_id=={chat_id} AND user_id=={user_id} ORDER BY id DESC"
 	try:
-		with sqlite3.connect(path_full_db) as sqlite_connection:
+		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 			cursor.execute(sqlite_query)
 			record = cursor.fetchone()
@@ -306,7 +302,7 @@ def member_false_checkin_count(chat_id, user_id, period):
 	table_name = 'members'
 	sqlite_query = f"SELECT count(time_joined) FROM {table_name} WHERE chat_id=={chat_id} AND user_id=={user_id} AND time_checkin==0 AND time_joined>{int(time.time())-period*24*60*60}"
 	try:
-		with sqlite3.connect(path_full_db) as sqlite_connection:
+		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 			cursor.row_factory = lambda cursor, row: row[0]	# Вывод только первого элемента вместо кортежа
 			cursor.execute(sqlite_query)
@@ -324,7 +320,7 @@ def member_set_checked(chat_id, user_id):
 	table_name = 'members'
 	sqlite_query = f"UPDATE {table_name} SET time_checkin={int(time.time())} WHERE id==(SELECT max(id) FROM {table_name} WHERE chat_id=={chat_id} AND user_id=={user_id})"
 	try:
-		with sqlite3.connect(path_full_db) as sqlite_connection:
+		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 			cursor.execute(sqlite_query)
 	except sqlite3.Error as error:
@@ -351,7 +347,7 @@ def ban_member(chat_id, user_banned_id, until_time=int(time.time())+config.ban_d
 		table_name = 'ban'
 		sqlite_query = f"INSERT INTO {table_name} (chat_id, user_banned_id, user_voted_id, unix_time) VALUES ({chat_id}, {user_banned_id}, {user_voted_id}, {int(time.time())})"
 		try:
-			with sqlite3.connect(path_full_db) as sqlite_connection:
+			with sqlite3.connect(path_db) as sqlite_connection:
 				cursor = sqlite_connection.cursor()
 				cursor.execute(sqlite_query)			
 		except sqlite3.Error as error:
@@ -362,7 +358,7 @@ def ban_voted_get_list(chat_id, banned_id, ban_init_time):
 	table_name = 'ban'
 	sqlite_query = f"SELECT user_voted_id FROM {table_name} WHERE chat_id=={chat_id} AND user_banned_id=={banned_id} AND unix_time>={ban_init_time}"
 	try:
-		with sqlite3.connect(path_full_db) as sqlite_connection:
+		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 			cursor.row_factory = lambda cursor, row: row[0]
 			cursor.execute(sqlite_query)
@@ -377,7 +373,7 @@ def messages_add_new(message):
 	table_name = 'messages'
 	sqlite_query = f"INSERT INTO {table_name} (chat_id, message_id, from_user_id, unix_time) VALUES ({message.chat.id}, {message.id}, {message.from_user.id}, {message.date})"
 	try:
-		with sqlite3.connect(path_full_db) as sqlite_connection:
+		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 			cursor.execute(sqlite_query)
 	except sqlite3.Error as error:
@@ -388,7 +384,7 @@ def messages_delete(chat_id, from_user_id):
 	table_name = 'messages'
 	sqlite_query = f"SELECT message_id FROM {table_name} WHERE chat_id=={chat_id} AND from_user_id=={from_user_id} AND unix_time>{int(time.time())-2*24*60*60}"
 	try:
-		with sqlite3.connect(path_full_db) as sqlite_connection:
+		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 			cursor.row_factory = lambda cursor, row: row[0]	# Вывод только первого элемента вместо кортежа
 			cursor.execute(sqlite_query)
@@ -406,7 +402,7 @@ def messages_delete(chat_id, from_user_id):
 # ---------------------- Статистика работы бота ------------------------
 def statistics_send(chat_id, period=config.statistics_period_days):
 	try:
-		with sqlite3.connect(path_full_db) as sqlite_connection:
+		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 			cursor.row_factory = lambda cursor, row: row[0]	# Вывод только первого элемента вместо кортежа
 			
@@ -595,7 +591,7 @@ def handler_get_log(message):
 			if length:
 				table_name = 'log'
 				sqlite_query = f"SELECT chat_id, message_id, log_text, unix_time FROM {table_name} ORDER BY id DESC"
-				with sqlite3.connect(path_full_db) as sqlite_connection:
+				with sqlite3.connect(path_db) as sqlite_connection:
 					cursor = sqlite_connection.cursor()
 					cursor.execute(sqlite_query)
 					records = cursor.fetchall()										# Необработанный список из таблицы log нужен чтобы после получить количество записей по маркеру
@@ -622,7 +618,7 @@ def handler_get_log(message):
 
 		else:																					# Отправить файл log, если НЕ передано количество строк вместе с командой /get_log
 			upload_filename = f'log_{time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())}.txt'
-			with open(path_full_log, "rb") as file:
+			with open(path_log, "rb") as file:
 				try:
 					bot.send_document(message.chat.id, document=file, visible_file_name=upload_filename)
 				except Exception:
@@ -1370,25 +1366,25 @@ def handler_messages(message):
 							file_info = bot.get_file(message.document.file_id)
 							downloaded_file = bot.download_file(file_info.file_path)		# Скачивание 3d модели
 							# Переименовать на случай, если имя содержит не ASCII символы. Необходимо для minirender
-							full_path_model3d = os.path.join(path_dir_models3d, f'{file_info.file_unique_id}.{file_ext}')
-							with open(full_path_model3d, 'wb') as new_file:
+							path_model3d = os.path.join(path_dir_models3d, f'{file_info.file_unique_id}.{file_ext}')
+							with open(path_model3d, 'wb') as new_file:
 								new_file.write(downloaded_file)									# Сохранение 3d модели
 							
-							full_path_stl = re.sub(r'(?i)\.st(e?)p$', '.stl', full_path_model3d)
+							path_stl = re.sub(r'(?i)\.st(e?)p$', '.stl', path_model3d)
 							
 							if (re.search(r'\b(st(e?)p)\b', file_ext.casefold())):		# Если модель в формате STEP
 								#log(f'Отправлена step модель {file_name}', message.chat.id, message.id)
-								command = f'gmsh -v 0 "{full_path_model3d}" -0 -o "{full_path_stl}"'	# Конвертирование STEP в STL при помощи gmsh и occt
+								command = f'gmsh -v 0 "{path_model3d}" -0 -o "{path_stl}"'	# Конвертирование STEP в STL при помощи gmsh и occt
 								os.system(command)
-								os.remove(full_path_model3d)										# Удаление файла STEP
+								os.remove(path_model3d)										# Удаление файла STEP
 
-							if not os.path.exists(full_path_stl):
-								log(f'Не найден файл {full_path_stl}', message.chat.id, message.id)
+							if not os.path.exists(path_stl):
+								log(f'Не найден файл {path_stl}', message.chat.id, message.id)
 							else:
-								if os.stat(full_path_stl).st_size < 100:
-									log(f'Файл stl подозрительно маленький ({os.stat(full_path_stl).st_size} байт)', message.chat.id, message.id)
+								if os.stat(path_stl).st_size < 100:
+									log(f'Файл stl подозрительно маленький ({os.stat(path_stl).st_size} байт)', message.chat.id, message.id)
 								else:
-									command = f'{path_full_minirender} -o -- -tilt 30 -yaw 20 -w {config.preview_resolution} -h {config.preview_resolution} "{full_path_stl}" | convert - png:-'
+									command = f'{path_minirender} -o -- -tilt 30 -yaw 20 -w {config.preview_resolution} -h {config.preview_resolution} "{path_stl}" | convert - png:-'
 									image = subprocess.check_output(command, shell=True)
 									
 									if sys.getsizeof(image) < 500:
@@ -1402,7 +1398,7 @@ def handler_messages(message):
 										else:
 											log(f'Отправлено превью файла {file_name}', message.chat.id, message.id)
 											# Удаление файлов STL и PNG
-											os.remove(full_path_stl)
+											os.remove(path_stl)
 
 # ======================================================================
 
@@ -1466,8 +1462,8 @@ def handler_callback_query(call):
 # ======================================================================
 
 if __name__ == '__main__':
-	path_full_db = get_full_path(config.path_db)
-	path_full_log = get_full_path(config.path_log)
+	path_db = get_full_path(config.path_db)
+	path_log = get_full_path(config.path_log)
 
 	db_initialization()																	# Инициализация базы данных
 
@@ -1482,7 +1478,7 @@ if __name__ == '__main__':
 	spam_set_new_member = set_from_file(get_full_path(config.path_spam_new_member))		# Множество spam маркеров при проверки новых участников
 
 	stl_last_id = 0
-	path_full_minirender = get_full_path(config.path_minirender)
+	path_minirender = get_full_path(config.path_minirender)
 	path_dir_models3d = get_full_path(config.path_models3d)
 	if not os.path.exists(path_dir_models3d):
 		os.makedirs(path_dir_models3d)
