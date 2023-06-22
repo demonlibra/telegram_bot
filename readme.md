@@ -66,6 +66,7 @@
   WorkingDirectory=/home/<user_name>/bot
   ExecStart=/home/<user_name>/bot/python_env/bin/python3 /home/<user_name>/bot/bot.py
   Type=simple
+  User=<user_name>
   KillMode=process
  
   SyslogIdentifier=bot
@@ -78,7 +79,7 @@
   WantedBy=network-online.target
 ```  
 
-Вместо **/home/<user_name>/bot/** задайте корректный путь к файлу сценария.
+Вместо **<user_name>** задайте имя пользователя.
 
 2. Обновите список сервисов **systemd** и запустите сервис **bot**  
 `sudo systemctl daemon-reload`  

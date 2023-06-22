@@ -1073,6 +1073,7 @@ def handler_new_chat_members(message):
 					break
 				else: time.sleep(1)
 
+			# Новый участник прошёл проверку
 			if	(new_member in new_members_list) and (new_member['checked'] == 1):
 				member_set_checked(message.chat.id, message.from_user.id)
 				new_members_list.remove(new_member)
@@ -1092,11 +1093,12 @@ def handler_new_chat_members(message):
 				else:
 					log(f'Новый участник {member_info(message.from_user)} прошёл проверку', message.chat.id)
 
-			if (new_member in new_members_list) and (new_member['checked'] == 0): # Если новый участник не успел пройти проверку
+			# Новый участник НЕ прошёл проверку
+			if (new_member in new_members_list) and (new_member['checked'] == 0):
 				new_members_list.remove(new_member)
-				mfcc = member_false_checkin_count(message.chat.id, message.from_user.id, 30)
-				log(f'Новый участник {member_info(message.from_user)} не прошёл проверку {mfcc} раз(а)', message.chat.id)
-				if mfcc >= 5:
+				mfcc = member_false_checkin_count(message.chat.id, message.from_user.id, config.period_allowed_checks)
+				log(f'Новый участник {member_info(message.from_user)} не прошёл проверку {mfcc} раз(а) за {config.period_allowed_checks} дней', message.chat.id)
+				if mfcc >= config.number_allowed_checks:
 					ban_member(message.chat.id, message.from_user.id)
 				else:
 					time_checkin_restrict = int(time.time()) + config.minutes_between_checkin*60
