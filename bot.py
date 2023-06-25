@@ -77,7 +77,7 @@ def log(log_text, chat_id=False, message_id=False):
 	print(f'\n{time_marker} {log_text}')											# Вывод сообщения в консоль
 
 											# Запись сообщения в файл 
-	if chat_id: log_chat_id = f'в группе {chat_id}'
+	if chat_id: log_chat_id = f' в группе {chat_id}'
 	else: log_chat_id = ''
 	if message_id: log_message_id = f' - {message_id}'
 	else: log_message_id = ''
@@ -251,7 +251,7 @@ def db_clean():
 
 # ------------------ Удаление старых строк из таблицы ------------------
 def db_delete_old_data(table, time_field, days2del):							# (<имя_таблицы>, <имя_поля_временной_метки>, <удалять_записи_старше_дней>)
-	unix_time = int(time.time()) - (days2del * 24 * 60 * 60)
+	unix_time = time.time() - (days2del * 24 * 60 * 60)
 	sqlite_query = f'DELETE FROM {table} WHERE {time_field}<{unix_time}'
 	try:
 		with sqlite3.connect(path_db) as sqlite_connection:
@@ -303,7 +303,7 @@ def member_checkin(chat_id, user_id):
 # ----------- Количество неудачных проверок нового участника -----------
 def member_false_checkin_count(chat_id, user_id, period):
 	table_name = 'members'
-	sqlite_query = f"SELECT count(time_joined) FROM {table_name} WHERE chat_id=={chat_id} AND user_id=={user_id} AND time_checkin==0 AND time_joined>{int(time.time())-period*24*60*60}"
+	sqlite_query = f"SELECT count(time_joined) FROM {table_name} WHERE chat_id=={chat_id} AND user_id=={user_id} AND time_checkin==0 AND time_joined>{time.time()-period*24*60*60}"
 	try:
 		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
@@ -330,8 +330,8 @@ def member_set_checked(chat_id, user_id):
 		log(f'Ошибка записи времени прохождения проверки новым участником {user_id} {error}', chat_id)
 
 # -------- Блокировка участника и вставка данных в таблицу ban ---------
-def ban_member(chat_id, user_banned_id, until_time=int(time.time())+config.ban_days*24*60*60, user_voted_id=config.bot_id):
-	if until_time >= (int(time.time())+(config.ban_days-1)*24*60*60):
+def ban_member(chat_id, user_banned_id, until_time=time.time()+config.ban_days*24*60*60, user_voted_id=config.bot_id):
+	if until_time >= (time.time()+(config.ban_days-1)*24*60*60):
 		ban_forever = True
 	else:
 		ban_forever = False
@@ -385,7 +385,7 @@ def messages_add_new(message):
 # ---------------- Удаление сообщений участника группы ------------------ 
 def messages_delete(chat_id, from_user_id):
 	table_name = 'messages'
-	sqlite_query = f"SELECT message_id FROM {table_name} WHERE chat_id=={chat_id} AND from_user_id=={from_user_id} AND unix_time>{int(time.time())-2*24*60*60}"
+	sqlite_query = f"SELECT message_id FROM {table_name} WHERE chat_id=={chat_id} AND from_user_id=={from_user_id} AND unix_time>{time.time()-2*24*60*60}"
 	try:
 		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
@@ -410,12 +410,12 @@ def statistics_send(chat_id, period=config.statistics_period_days):
 			cursor.row_factory = lambda cursor, row: row[0]	# Вывод только первого элемента вместо кортежа
 			
 			# Прошли проверку за период
-			sqlite_query = f"SELECT count(id) FROM members WHERE chat_id=={chat_id} AND time_checkin!=0 AND time_joined>{int(time.time())-period*24*60*60}"
+			sqlite_query = f"SELECT count(id) FROM members WHERE chat_id=={chat_id} AND time_checkin!=0 AND time_joined>{time.time()-period*24*60*60}"
 			cursor.execute(sqlite_query)
 			number_checked = cursor.fetchone()
 			
 			# Не прошли проверку за период
-			sqlite_query = f"SELECT count(id) FROM members WHERE chat_id=={chat_id} AND time_checkin==0 AND time_joined>{int(time.time())-period*24*60*60}"
+			sqlite_query = f"SELECT count(id) FROM members WHERE chat_id=={chat_id} AND time_checkin==0 AND time_joined>{time.time()-period*24*60*60}"
 			cursor.execute(sqlite_query)
 			number_kicked = cursor.fetchone()
 
@@ -436,7 +436,7 @@ def statistics_send(chat_id, period=config.statistics_period_days):
 			date_start_bot = time.strftime("%d-%m-%Y", time.localtime(record))
 
 			# Заблокировано за период
-			sqlite_query = f"SELECT count(id) FROM ban WHERE chat_id=={chat_id} AND user_voted_id=={config.bot_id} AND unix_time>{int(time.time())-period*24*60*60}"
+			sqlite_query = f"SELECT count(id) FROM ban WHERE chat_id=={chat_id} AND user_voted_id=={config.bot_id} AND unix_time>{time.time()-period*24*60*60}"
 			cursor.execute(sqlite_query)
 			number_blocked = cursor.fetchone()
 
@@ -474,7 +474,7 @@ def statistics_send(chat_id, period=config.statistics_period_days):
 		text_heading = f'За год:'
 	else:
 		text_heading = (
-		f'В период с {time.strftime("%d-%m-%Y", time.localtime(int(time.time())-period*24*60*60))}'
+		f'В период с {time.strftime("%d-%m-%Y", time.localtime(time.time()-period*24*60*60))}'
 		f' по {time.strftime("%d-%m-%Y", time.localtime())}:')
 
 	text = (
@@ -811,7 +811,7 @@ def handler_ban(message):
 		
 		count = 1
 		# Если участник, применяющий ban, состоит в группе менее nnn дней
-		member_voted_time_in_group = int(time.time())-time_joined_voted
+		member_voted_time_in_group = time.time()-time_joined_voted
 		if member_voted_time_in_group < (config.days_in_group_to_use_ban*24*60*60):
 			text = f'{count}. Вам запрещено использовать команду /ban, так как Вы состоите в группе меньше {config.days_in_group_to_use_ban} дней.\n'
 			log(f'Запрос ban от {member_info(message.from_user)} в группе менее {config.days_in_group_to_use_ban} дней ({int((time.time()-time_joined_voted)/(24*60*60))})', message.chat.id, message.id)
@@ -826,7 +826,7 @@ def handler_ban(message):
 		# Если ban пытаются применить к участнику, который давно присоединился к группе
 		if message.reply_to_message:
 			_, time_joined_banned = member_checkin(message.chat.id, message.reply_to_message.from_user.id)
-			member_banned_time_in_group = int(time.time())-time_joined_banned
+			member_banned_time_in_group = time.time() - time_joined_banned
 			if member_banned_time_in_group > (config.days_in_group_can_be_banned*24*60*60):
 				log(f'Запрос ban от {member_info(message.from_user)} на участника {member_info(message.reply_to_message.from_user)}, который более недели', message.chat.id, message.id)
 				text = f'{text}{count}. <b>/ban</b> может быть применён только к участнику, состоящему в группе менее недели. Появится админ и всех рассудит.\n'
@@ -898,7 +898,7 @@ def handler_ban_id(message):
 						if command == '/ban_id':
 							ban_member(message.chat.id, id, user_voted_id=message.from_user.id)
 						elif command == '/unban_id':
-							ban_member(message.chat.id, id, user_voted_id=message.from_user.id, until_time=int(time.time())+60)
+							ban_member(message.chat.id, id, user_voted_id=message.from_user.id, until_time=time.time()+60)
 						count += 1
 					if count < len(ids_to_block):
 						time.sleep(3)
@@ -952,8 +952,8 @@ def handler_mute(message):
 			except Exception:
 				time_mute_h = 24															# Время mute 24 часа по умолчанию
 			
-			time_mute_s = int(time.time()) + time_mute_h * 60 * 60			# Расчёт времени окончания блокировки
-			#time_mute_s = int(time.time()) + 60										# для тестов
+			time_mute_s = time.time() + time_mute_h * 60 * 60			# Расчёт времени окончания блокировки
+			#time_mute_s = time.time() + 60										# для тестов
 			try:
 				check_mute = bot.restrict_chat_member(chat_id=message.chat.id, user_id=message.reply_to_message.from_user.id, until_date=time_mute_s)
 			except Exception:
@@ -1100,7 +1100,7 @@ def handler_new_chat_members(message):
 				if mfcc >= config.number_allowed_checks:
 					ban_member(message.chat.id, message.from_user.id)
 				else:
-					time_checkin_restrict = int(time.time()) + config.minutes_between_checkin*60
+					time_checkin_restrict = time.time() + config.minutes_between_checkin*60
 					ban_member(message.chat.id, message.from_user.id, until_time=time_checkin_restrict)
 
 			captcha_del_records(message.chat.id, message.from_user.id)		# Удаление последней captcha
@@ -1421,7 +1421,7 @@ def handler_callback_query(call):
 		if (checkin_voted == False):	
 			log(f'Голосование ban от {member_info(call.from_user)} не прошедшего проверку', call.message.chat.id, call.message.id)
 		
-		elif (int(time.time())-time_joined_voted < config.days_in_group_to_use_ban*24*60*60) and not is_admin(call.message.chat.id, call.from_user.id):
+		elif (time.time()-time_joined_voted < config.days_in_group_to_use_ban*24*60*60) and not is_admin(call.message.chat.id, call.from_user.id):
 			log(f'Голосование ban от {member_info(call.from_user)} в группе менее {config.days_in_group_to_use_ban} дней ({(int(time.time())-time_joined_voted)/(24*60*60)})', call.message.chat.id, call.message.id)
 		
 		else:
