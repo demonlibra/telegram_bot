@@ -192,7 +192,7 @@ def db_initialization():
 		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 
-			# Создание таблицы messages, если отсутствует
+			# messages - сообщения
 			sqlite_create_table_query = """CREATE TABLE IF NOT EXISTS messages (
 												id INTEGER PRIMARY KEY AUTOINCREMENT,
 												chat_id INTEGER NOT NULL,
@@ -201,17 +201,18 @@ def db_initialization():
 												unix_time INTEGER NOT NULL);"""
 			cursor.execute(sqlite_create_table_query)
 
-			# Создание таблицы members, если отсутствует
+			# members - участники группы
 			sqlite_create_table_query = """CREATE TABLE IF NOT EXISTS members (
 												id INTEGER PRIMARY KEY AUTOINCREMENT,
 												chat_id INTEGER NOT NULL,
 												user_id INTEGER NOT NULL,
 												time_joined INTEGER NOT NULL,
-												time_checkin INTEGER DEFAULT 0);"""
+												time_checkin INTEGER DEFAULT 0,
+												time_blocked INTEGER DEFAULT 0);"""
 			cursor.execute(sqlite_create_table_query)
 
-			# Создание таблицы ban, если отсутствует
-			sqlite_create_table_query = """CREATE TABLE IF NOT EXISTS ban (
+			# ban_vote - голосование для блокировки
+			sqlite_create_table_query = """CREATE TABLE IF NOT EXISTS ban_vote (
 												id INTEGER PRIMARY KEY AUTOINCREMENT,
 												chat_id INTEGER NOT NULL,
 												user_banned_id INTEGER NOT NULL,
@@ -219,7 +220,7 @@ def db_initialization():
 												unix_time INTEGER NOT NULL);"""
 			cursor.execute(sqlite_create_table_query)
 
-			# Создание таблицы log, если отсутствует
+			# log - журнал
 			sqlite_create_table_query = """CREATE TABLE IF NOT EXISTS log (
 												id INTEGER PRIMARY KEY AUTOINCREMENT,
 												chat_id INTEGER,
@@ -329,37 +330,41 @@ def member_set_checked(chat_id, user_id):
 	except sqlite3.Error as error:
 		log(f'Ошибка записи времени прохождения проверки новым участником {user_id} {error}', chat_id)
 
-# -------- Блокировка участника и вставка данных в таблицу ban ---------
-def ban_member(chat_id, user_banned_id, period_block=config.ban_days*24*60*60, user_voted_id=config.bot_id):
-	time_now = time.time()
-	if period_block >= config.ban_days*24*60*60:
-		ban_forever = True
+# -------------------------- Блокировка участника ----------------------
+def block_member(chat_id, user_id, period_block=config.ban_days*24*60*60):
+	time_now = int(time.time())
+	try:
+		bot.ban_chat_member(chat_id, user_id, until_date=time_now+period_block)
+	except Exception:
+		log(f'Ошибка блокировки участника {user_id}', chat_id)
 	else:
-		ban_forever = False
-	log(f'user_banned_id={user_banned_id}, ban_forever={ban_forever}, period_block={period_block}')
+		if period_block >= config.ban_days*24*60*60:
+			log(f'Заблокирован участник {user_id}', chat_id)
 
-	if period_block != 0:	# Блокировать участника, только если это НЕ голосование
-		try:
-			bot.ban_chat_member(chat_id, user_banned_id, until_date=time_now+period_block)
-		except Exception:
-			log(f'Ошибка блокировки участника {user_banned_id}', chat_id)
-		else:
-			if ban_forever:
-				log(f'Заблокирован участник {user_banned_id}', chat_id)
+			table_name = 'members'
+			sqlite_query = f"UPDATE members SET time_blocked={time_now} WHERE id==(SELECT max(id) FROM {table_name} WHERE chat_id=={chat_id} AND user_id=={user_id})"
+			try:
+				with sqlite3.connect(path_db) as sqlite_connection:
+					cursor = sqlite_connection.cursor()
+					cursor.execute(sqlite_query)
+			except sqlite3.Error as error:
+				log(f'Ошибка записи времени блокировки участника {user_id} {error}', chat_id)
 
-	if ban_forever or period_block == 0:	# Заносим данные в таблицу ban
-		table_name = 'ban'
-		sqlite_query = f"INSERT INTO {table_name} (chat_id, user_banned_id, user_voted_id, unix_time) VALUES ({chat_id}, {user_banned_id}, {user_voted_id}, {time_now})"
-		try:
-			with sqlite3.connect(path_db) as sqlite_connection:
-				cursor = sqlite_connection.cursor()
-				cursor.execute(sqlite_query)			
-		except sqlite3.Error as error:
-			log(f'Ошибка записи {user_banned_id} в таблицу ban {error}', chat_id)
+# -------------------- Добавление голоса за ban ------------------------
+def ban_vote_add(chat_id, user_banned_id, user_voted_id):
+	time_now = int(time.time())
+	table_name = 'ban_vote'
+	sqlite_query = f"INSERT INTO {table_name} (chat_id, user_banned_id, user_voted_id, unix_time) VALUES ({chat_id}, {user_banned_id}, {user_voted_id}, {time_now})"
+	try:
+		with sqlite3.connect(path_db) as sqlite_connection:
+			cursor = sqlite_connection.cursor()
+			cursor.execute(sqlite_query)			
+	except sqlite3.Error as error:
+		log(f'Ошибка записи {user_banned_id} в таблицу ban {error}', chat_id)
 
 # ------------- Получение списка проголосовавших за ban ----------------
 def ban_voted_get_list(chat_id, banned_id, ban_init_time):
-	table_name = 'ban'
+	table_name = 'ban_vote'
 	sqlite_query = f"SELECT user_voted_id FROM {table_name} WHERE chat_id=={chat_id} AND user_banned_id=={banned_id} AND unix_time>={ban_init_time}"
 	try:
 		with sqlite3.connect(path_db) as sqlite_connection:
@@ -437,12 +442,12 @@ def statistics_send(chat_id, period=config.statistics_period_days):
 			date_start_bot = time.strftime("%d-%m-%Y", time.localtime(record))
 
 			# Заблокировано за период
-			sqlite_query = f"SELECT count(id) FROM ban WHERE chat_id=={chat_id} AND user_voted_id=={config.bot_id} AND unix_time>{time.time()-period*24*60*60}"
+			sqlite_query = f"SELECT count(id) FROM members WHERE chat_id=={chat_id} AND time_blocked>{time.time()-period*24*60*60}"
 			cursor.execute(sqlite_query)
 			number_blocked = cursor.fetchone()
 
 			# Всего заблокировано
-			sqlite_query = f"SELECT count(id) FROM ban WHERE chat_id=={chat_id} AND user_voted_id=={config.bot_id}"
+			sqlite_query = f"SELECT count(id) FROM members WHERE chat_id=={chat_id} AND time_blocked!=0"
 			cursor.execute(sqlite_query)
 			number_blocked_all = cursor.fetchone()
 
@@ -798,7 +803,7 @@ def handler_audio_messages(message):
 
 
 # ============================== @ban ==================================
-# ---------------------- Блокировка пользователя -----------------------
+# -------------- Голосование блокировки участника группы ---------------
 
 @bot.message_handler(regexp=r'(?i)\A(\/|@|b)ban\b')
 def handler_ban(message):
@@ -860,7 +865,7 @@ def handler_ban(message):
 			except Exception:
 				log(f'Ошибка отправки кнопки Забанить', message.chat.id)
 			else:
-				ban_member(message.chat.id, banned_user_id, user_voted_id=message.from_user.id, period_block=0) # только голосование за ban
+				ban_vote_add(message.chat.id, banned_user_id, user_voted_id=message.from_user.id) # только голосование за ban
 
 # ======================================================================
 
@@ -897,9 +902,9 @@ def handler_ban_id(message):
 				for id in ids_to_block:
 					if id.isnumeric():
 						if command == '/ban_id':
-							ban_member(message.chat.id, id, user_voted_id=message.from_user.id)
+							block_member(message.chat.id, id)			# ban_id
 						elif command == '/unban_id':
-							ban_member(message.chat.id, id, user_voted_id=message.from_user.id, period_block=60)
+							block_member(message.chat.id, id, period_block=60)	# unban_id
 						count += 1
 					if count < len(ids_to_block):
 						time.sleep(3)
@@ -1098,10 +1103,10 @@ def handler_new_chat_members(message):
 				new_members_list.remove(new_member)
 				mfcc = member_false_checkin_count(message.chat.id, message.from_user.id, config.period_allowed_checks)
 				log(f'Новый участник {member_info(message.from_user)} не прошёл проверку {mfcc} раз(а) за {config.period_allowed_checks} дней', message.chat.id)
-				if mfcc >= config.number_allowed_checks:	# Блокировать пользователя навсегда при множественных неудачных проверках
-					ban_member(message.chat.id, message.from_user.id)
-				else:													# Блокировать пользователя временно при неудачной проверке
-					ban_member(message.chat.id, message.from_user.id, period_block=config.minutes_between_checkin*60)
+				if mfcc >= config.number_allowed_checks:
+					block_member(message.chat.id, message.from_user.id)	# Блокировать участника навсегда при множественных неудачных проверках
+				else:
+					block_member(message.chat.id, message.from_user.id, period_block=config.minutes_between_checkin*60)	# Блокировать участника временно при неудачной проверке
 
 			captcha_del_records(message.chat.id, message.from_user.id)		# Удаление последней captcha
 
@@ -1186,7 +1191,7 @@ def handler_messages(message):
 				and (spam_marker in str(message.text).casefold() or spam_marker in str(message.caption).casefold())):
 					new_members_list.remove(new_member)
 					log(f'Спам метка -{spam_marker}- от нового участника {member_info(message.from_user)}', message.chat.id, message.id)
-					ban_member(message.chat.id, message.from_user.id)
+					block_member(message.chat.id, message.from_user.id)		# Блокировка нового участника за спам
 					break
 			else:
 				for captcha_record in captcha_list[::-1]:							# Проверка каптчи
@@ -1211,7 +1216,7 @@ def handler_messages(message):
 				or spam_marker in str(message.from_user.first_name).casefold()):
 					messages_delete(message.chat.id, message.from_user.id)
 					log(f'Спам метка -{spam_marker}- от {member_info(message.from_user)}', message.chat.id, message.id)
-					ban_member(message.chat.id, message.from_user.id)
+					block_member(message.chat.id, message.from_user.id)	# Блокировка участника за спам
 					break
 
 			else:				# Если пройдена проверка на спам 
@@ -1423,7 +1428,6 @@ def handler_callback_query(call):
 		
 		elif (time.time()-time_joined_voted < config.days_in_group_to_use_ban*24*60*60) and not is_admin(call.message.chat.id, call.from_user.id):
 			log(f'Голосование ban от {member_info(call.from_user)} в группе менее {config.days_in_group_to_use_ban} дней ({(int(time.time())-time_joined_voted)/(24*60*60)})', call.message.chat.id, call.message.id)
-		
 		else:
 			log(call.data, call.message.chat.id)
 
@@ -1441,7 +1445,7 @@ def handler_callback_query(call):
 				else:
 					log(f'{member_info(call.from_user)} cогласен заблокировать {banned_first_name} {banned_user_id}', call.message.chat.id, call.message.id)
 
-					ban_member(call.message.chat.id, banned_user_id, user_voted_id=call.from_user.id, period_block=0) # только голосование за ban
+					ban_vote_add(call.message.chat.id, banned_user_id, user_voted_id=call.from_user.id) # Добавление голоса за ban
 
 					inline_button = telebot.types.InlineKeyboardMarkup()		# Изменённая кнопка Забанить
 					inline_button.add(telebot.types.InlineKeyboardButton(f'Забанить {len(list_ban_voted)+1}/{config.members_poll_for_ban}', callback_data=f'ban|||{banned_user_id}|||{banned_first_name}|||{banned_by_message_id}|||{ban_init_time}'))
@@ -1453,7 +1457,7 @@ def handler_callback_query(call):
 						log(f'Ошибка изменения голосования блокировки {call.message.id}', call.message.chat.id)
 
 					if len(list_ban_voted)+1 >= config.members_poll_for_ban:	# Если достигнуто нужное число голосов за блокировку
-						ban_member(call.message.chat.id, banned_user_id)
+						block_member(call.message.chat.id, banned_user_id)	# Блокировка участника после голосования
 						messages_delete(call.message.chat.id, banned_user_id)	# Удаление сообщений заблокированного пользователя
 
 						try:
