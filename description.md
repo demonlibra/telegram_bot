@@ -64,3 +64,5 @@
 | /get_log | файл log | Только для администраторов группы |
 | /get_log N | N последних строк log | Только для администраторов группы |
 | /get_log N <ключевая_фраза> | N последних строк log с ключевой фразой | Только для администраторов группы |
+
+<img src="https://github.com/demonlibra/telegram_bot/blob/master/log.png" width="300">

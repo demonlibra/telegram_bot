@@ -11,6 +11,8 @@
 
 Подробное описание функционала в файле [description.md](description.md) и на [форуме UNI](https://uni3d.store/viewtopic.php?t=1090)  
 
+<img src="https://github.com/demonlibra/telegram_bot/blob/master/log.png" width="300">
+
 Для тестирования бот можно запустить даже на домашнем ноутбуке, статический и белый IP не требуются  
 Для полноценного использования лучше использовать [VPS](https://ru.wikipedia.org/wiki/VPS)   
 Бот подключен для тестов к Telegram группе [unitestgroup](https://t.me/unitestgroup)
