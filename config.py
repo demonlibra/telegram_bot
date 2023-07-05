@@ -51,11 +51,12 @@ help_links = (
 	(('Сайт 4', 'https://site4.ru'), ('Сайт 5', 'https://site5.ru'), ('Сайт 6', 'https://site6.ru'))
 	)
 
-# Информационные сообщения при обнаружении меток в сообщениях 
+# Информационные сообщения при обнаружении меток (регулярных выражений python) в сообщениях 
 markers_links = (
-	(r'(?i)метка_1', 'site1.ru', f'<a href="https://site1.ru">Сайт 1 site1.ru</a>'),
-	(r'(?i)метка_2', 'site2.ru', f'<a href="https://site2.ru">Сайт 2 site2.ru</a>'),
-	(r'(?i)метка_3', 'site3.ru', f'<a href="https://site3.ru">Сайт 3 site3.ru</a>')
+	(r'(?i)\b(метка_1)', 'site1.ru', f'<a href="https://site1.ru">Сайт 1 site1.ru</a>'),
+	(r'(?i)\b(метка_2)', 'site2.ru', f'<a href="https://site2.ru">Сайт 2 site2.ru</a>'),
+	(r'(?i)\b(метка_3)', 'site3.ru', f'<a href="https://site3.ru">Сайт 3 site3.ru</a>')
 	)
-	
+
+# Удалять сообщения, содержащие метки (регулярные выражения python)
 markers_to_delete = (r'(?i)Удалить эту дрянь очень очень надо', r'(?i)и эту тоже надо удалить очень бы')
