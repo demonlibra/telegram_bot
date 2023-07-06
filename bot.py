@@ -1400,15 +1400,15 @@ def handler_messages(message):
 									image = subprocess.check_output(command, shell=True)
 									
 									if sys.getsizeof(image) < 500:
-										log(f'Ошибка создания превью файла {file_name}', message.chat.id, message.id)
+										log(f'Ошибка создания превью файла -{file_name}-', message.chat.id, message.id)
 									else:
 										try:
 											bot.send_document(message.chat.id, document=image, visible_file_name=f'{file_name[:file_name.rfind(".")]}.png') # Отправка как файла (более компактно)
 											#bot.send_photo(message.chat.id, file, caption=image) # Отправка как фото
 										except Exception:
-											log(f'Ошибка отправки превью файла {file_name}', message.chat.id, message.id)
+											log(f'Ошибка отправки превью файла -{file_name}-', message.chat.id, message.id)
 										else:
-											log(f'Отправлено превью файла {file_name}', message.chat.id, message.id)
+											log(f'Отправлено превью файла -{file_name}-', message.chat.id, message.id)
 											# Удаление файлов STL и PNG
 											os.remove(path_stl)
 
