@@ -877,42 +877,37 @@ def handler_ban_id(message):
 	command = message.text.split()[0] # Содержит ban_id или unban_id
 	log(f'{member_info(message.from_user)} отправил команду {message.text}', message.chat.id, message.id)
 	
-	try:																						# Получаем данные участника отправившего команду /(un)ban_id
-		member_raw_data = bot.get_chat_member(message.chat.id, message.from_user.id)
-	except Exception:
-		log(f'Ошибка получения данных участника {message.from_user.id}', message.chat.id)
-	else:
-		if member_raw_data.can_restrict_members and member_raw_data.status != 'creator':	# Если не разрешена блокировка других участников группы и не основатель группы 
-			log(f'Команда {command} не от администратора группы {member_info(message.from_user)}', message.chat.id, message.id)
-			text = f'<b>{message.from_user.first_name}</b>, вам не разрешено использовать команду <b>{command}</b>'
+	if not is_admin(message.chat.id, message.from_user.id)
+		log(f'Команда {command} не от администратора группы {member_info(message.from_user)}', message.chat.id, message.id)
+		text = f'<b>{message.from_user.first_name}</b>, вам не разрешено использовать команду <b>{command}</b>'
+		try:
+			bot.send_message(message.chat.id, text, parse_mode='html')
+		except Exception:
+			log(f'Ошибка отправки сообщения, {command} не разрешен', message.chat.id)
+	else:																					# Если разрешена блокировка других участников группы или основатель группы
+		ids_to_block = message.text.split(' ')[1:]	# Список id, переданных с командой /(un)ban_id
+		if len(ids_to_block) == 0:
+			text = f'С командой {command} не переданы id'
 			try:
 				bot.send_message(message.chat.id, text, parse_mode='html')
 			except Exception:
-				log(f'Ошибка отправки сообщения, {command} не разрешен', message.chat.id)
-		else:																					# Если разрешена блокировка других участников группы или основатель группы
-			ids_to_block = message.text.split(' ')[1:]	# Список id, переданных с командой /(un)ban_id
-			if len(ids_to_block) == 0:
-				text = f'С командой {command} не переданы id'
-				try:
-					bot.send_message(message.chat.id, text, parse_mode='html')
-				except Exception:
-					log(f'Ошибка отправки сообщения, c {command} не переданы id', message.chat.id)
-			else:
-				count = 0
-				for id in ids_to_block:
-					if id.isnumeric():
-						if command == '/ban_id':
-							block_member(message.chat.id, id)			# ban_id
-						elif command == '/unban_id':
-							block_member(message.chat.id, id, period_block=60)	# unban_id
-						count += 1
-					if count < len(ids_to_block):
-						time.sleep(3)
+				log(f'Ошибка отправки сообщения, c {command} не переданы id', message.chat.id)
+		else:
+			count = 0
+			for id in ids_to_block:
+				if id.isnumeric():
+					if command == '/ban_id':
+						block_member(message.chat.id, id)			# ban_id
+					elif command == '/unban_id':
+						block_member(message.chat.id, id, period_block=60)	# unban_id
+					count += 1
+				if count < len(ids_to_block):
+					time.sleep(3)
 
-				try:
-					bot.send_message(message.chat.id, f'Завершено {count}/{len(ids_to_block)}', parse_mode='html')
-				except Exception:
-					log(f'Ошибка отправки сообщения о завершении {command}', message.chat.id)
+			try:
+				bot.send_message(message.chat.id, f'Завершено {count}/{len(ids_to_block)}', parse_mode='html')
+			except Exception:
+				log(f'Ошибка отправки сообщения о завершении {command}', message.chat.id)
 
 # ======================================================================
 
