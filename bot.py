@@ -509,7 +509,7 @@ def captcha_del_records(chat_id, user_id):
 				log(f'Ошибка удаления captcha с id {captcha_record["captcha_id"]}', chat_id, captcha_record["captcha_id"])
 			else:
 				captcha_list.remove(captcha_record)
-				log(f"Удалена captcha {captcha_record['captcha']} с id {captcha_record['captcha_id']}", chat_id, captcha_record['captcha_id'])
+				#log(f"Удалена captcha {captcha_record['captcha']} с id {captcha_record['captcha_id']}", chat_id, captcha_record['captcha_id'])
 
 # ======================================================================
 
@@ -877,7 +877,7 @@ def handler_ban_id(message):
 	command = message.text.split()[0] # Содержит ban_id или unban_id
 	log(f'{member_info(message.from_user)} отправил команду {message.text}', message.chat.id, message.id)
 	
-	if not is_admin(message.chat.id, message.from_user.id)
+	if not is_admin(message.chat.id, message.from_user.id):
 		log(f'Команда {command} не от администратора группы {member_info(message.from_user)}', message.chat.id, message.id)
 		text = f'<b>{message.from_user.first_name}</b>, вам не разрешено использовать команду <b>{command}</b>'
 		try:
