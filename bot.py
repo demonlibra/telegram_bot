@@ -1038,11 +1038,6 @@ def handler_new_chat_members(message):
 			global new_members_list
 			new_members_list.append(new_member)
 
-			try:
-				bot.delete_message(message.chat.id, message.id)					# Удалить уведомление о подключении к группе нового участника
-			except Exception:
-				log(f'Ошибка удаления уведомления {message.id} о подключении к группе нового участника {message.from_user.id}', message.chat.id, message.id)
-
 			log(f'Новый участник {member_info(message.from_user)}', message.chat.id, message.id)
 
 			if message.from_user.username:
@@ -1095,6 +1090,11 @@ def handler_new_chat_members(message):
 
 			# Новый участник НЕ прошёл проверку
 			if (new_member in new_members_list) and (new_member['checked'] == 0):
+				try:
+					bot.delete_message(message.chat.id, message.id)				# Удалить уведомление о подключении к группе нового участника
+				except Exception:
+					log(f'Ошибка удаления уведомления {message.id} о подключении к группе нового участника {message.from_user.id}', message.chat.id, message.id)
+
 				new_members_list.remove(new_member)
 				mfcc = member_false_checkin_count(message.chat.id, message.from_user.id, config.period_allowed_checks)
 				log(f'Новый участник {member_info(message.from_user)} не прошёл проверку {mfcc} раз(а) за {config.period_allowed_checks} дней', message.chat.id)
