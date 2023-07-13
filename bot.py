@@ -553,7 +553,7 @@ def handler_cens(message):
 	global censured_list
 	if is_group_allowed(message, 'handler_cens'):
 		if message.from_user.id != message.chat.id:
-			text = f"Команду /cens можно отправлять только лично боту"
+			text = f"Команда /cens не работает в группе.\bОткройте чат с ботом и отправьте команду <b>/cens</b>"
 			try:
 				bot.send_message(message.chat.id, text, parse_mode='html')
 			except Exception:
