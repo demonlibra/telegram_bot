@@ -302,7 +302,7 @@ def member_checkin(chat_id, user_id):
 		log(f'Ошибка получения состояния участника {user_id} {error}', chat_id)
 		
 # ----------- Количество неудачных проверок нового участника -----------
-def member_false_checkin_count(chat_id, user_id, period):
+def member_false_checkin_count(chat_id, user_id, period=time.time()/(24*60*60)):
 	table_name = 'members'
 	sqlite_query = f"SELECT count(time_joined) FROM {table_name} WHERE chat_id=={chat_id} AND user_id=={user_id} AND time_checkin==0 AND time_joined>{time.time()-period*24*60*60}"
 	try:
@@ -1096,8 +1096,16 @@ def handler_new_chat_members(message):
 					log(f'Ошибка удаления уведомления {message.id} о подключении к группе нового участника {message.from_user.id}', message.chat.id, message.id)
 
 				new_members_list.remove(new_member)
+
 				mfcc = member_false_checkin_count(message.chat.id, message.from_user.id, config.period_allowed_checks)
-				log(f'Новый участник {member_info(message.from_user)} не прошёл проверку {mfcc} раз(а) за {config.period_allowed_checks} дней', message.chat.id)
+				mfcca = member_false_checkin_count(message.chat.id, message.from_user.id)
+				if mfcc > 1:
+					log(f'Новый участник {member_info(message.from_user)} не прошёл проверку {mfcc} раз(а) за {config.period_allowed_checks} дней', message.chat.id)
+				else:
+					log(f'Новый участник {member_info(message.from_user)} не прошёл проверку', message.chat.id)
+				if mfcca > 1:
+					log(f'Новый участник {member_info(message.from_user)} всего пытался пройти проверку {mfcca} раз')
+
 				if mfcc >= config.number_allowed_checks:
 					block_member(message.chat.id, message.from_user.id)	# Блокировать участника навсегда при множественных неудачных проверках
 				else:
