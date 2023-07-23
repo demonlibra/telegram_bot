@@ -1058,7 +1058,7 @@ def handler_new_chat_members(message):
 				invite_message = None
 				log(f'Ошибка отправки сообщения проверки нового участника', message.chat.id)
 			
-			member_add_new(message.chat.id, message.new_chat_members[0].id, message.date)	# Заносим данные о новом пользователя, как можно раньше
+			member_add_new(message.chat.id, message.new_chat_members[0].id, message.date)	# Заносим данные о новом участнике, как можно раньше
 
 			# Периодический опрос, не прошёл ли новый участник проверку через содержимое списка new_members_list
 			time_check_end = time.monotonic() + config.minutes_for_checkin * 60
@@ -1067,6 +1067,13 @@ def handler_new_chat_members(message):
 				if (new_member not in new_members_list) or (new_member['checked'] == 1): 
 					break
 				else: time.sleep(1)
+			
+			captcha_del_records(message.chat.id, message.from_user.id)		# Удаление последней captcha
+
+			try:
+				bot.delete_message(message.chat.id, invite_message.id)		# Удалить приветствие нового участника
+			except Exception:
+				log(f'Ошибка удаления приветствия нового участника {invite_message.id}', message.chat.id, invite_message.id)
 
 			# Новый участник прошёл проверку
 			if	(new_member in new_members_list) and (new_member['checked'] == 1):
@@ -1089,7 +1096,8 @@ def handler_new_chat_members(message):
 					log(f'Новый участник {member_info(message.from_user)} прошёл проверку', message.chat.id)
 
 			# Новый участник НЕ прошёл проверку
-			if (new_member in new_members_list) and (new_member['checked'] == 0):
+			elif ((new_member not in new_members_list)
+			or ((new_member in new_members_list) and (new_member['checked'] == 0))):
 				try:
 					bot.delete_message(message.chat.id, message.id)				# Удалить уведомление о подключении к группе нового участника
 				except Exception:
@@ -1107,16 +1115,9 @@ def handler_new_chat_members(message):
 					log(f'Новый участник {member_info(message.from_user)} всего пытался пройти проверку {mfcca} раз')
 
 				if mfcc >= config.number_allowed_checks:
-					block_member(message.chat.id, message.from_user.id)	# Блокировать участника навсегда при множественных неудачных проверках
+					block_member(message.chat.id, message.from_user.id)		# Блокировать участника навсегда при множественных неудачных проверках
 				else:
 					block_member(message.chat.id, message.from_user.id, period_block=config.minutes_between_checkin*60)	# Блокировать участника временно при неудачной проверке
-
-			captcha_del_records(message.chat.id, message.from_user.id)		# Удаление последней captcha
-
-			try:
-				bot.delete_message(message.chat.id, invite_message.id)		# Удалить приветствие нового участника
-			except Exception:
-				log(f'Ошибка удаления приветствия нового участника {invite_message.id}', message.chat.id, invite_message.id)
 
 # ======================================================================
 
