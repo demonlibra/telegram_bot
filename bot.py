@@ -1034,7 +1034,7 @@ def handler_new_chat_members(message):
 				member_set_checked(message.chat.id, new_member.id)				# Подтвердить проверку нового участника
 
 		else: # Новый участник подключился самостоятельно
-			new_member = {'chat_id': message.chat.id, 'user_id': message.from_user.id, 'checked': 0}
+			new_member = {'chat_id': message.chat.id, 'user_id': message.from_user.id, 'checked': 0, 'spammer': 0}
 			global new_members_list
 			new_members_list.append(new_member)
 
@@ -1058,13 +1058,13 @@ def handler_new_chat_members(message):
 				invite_message = None
 				log(f'Ошибка отправки сообщения проверки нового участника', message.chat.id)
 			
-			member_add_new(message.chat.id, message.new_chat_members[0].id, message.date)	# Заносим данные о новом участнике, как можно раньше
+			member_add_new(message.chat.id, message.new_chat_members[0].id, message.date)	# Заносим данные о новом участнике в БД
 
 			# Периодический опрос, не прошёл ли новый участник проверку через содержимое списка new_members_list
 			time_check_end = time.monotonic() + config.minutes_for_checkin * 60
 			while time.monotonic() < time_check_end:
-				# Если новый участник удалён за спам или прошёл проверку 
-				if (new_member not in new_members_list) or (new_member['checked'] == 1): 
+				if (new_member['spammer'] == 1) or (new_member['checked'] == 1):
+					# Если новый участник удалён за спам или прошёл проверку
 					break
 				else: time.sleep(1)
 			
@@ -1076,9 +1076,8 @@ def handler_new_chat_members(message):
 				log(f'Ошибка удаления приветствия нового участника {invite_message.id}', message.chat.id, invite_message.id)
 
 			# Новый участник прошёл проверку
-			if	(new_member in new_members_list) and (new_member['checked'] == 1):
+			if	new_member['checked'] == 1:
 				member_set_checked(message.chat.id, message.from_user.id)
-				new_members_list.remove(new_member)
 				if message.from_user.username:
 					username = f' (@{message.from_user.username})'
 				else: username = ''
@@ -1096,15 +1095,13 @@ def handler_new_chat_members(message):
 					log(f'Новый участник {member_info(message.from_user)} прошёл проверку', message.chat.id)
 
 			# Новый участник НЕ прошёл проверку
-			elif ((new_member not in new_members_list)
-			or ((new_member in new_members_list) and (new_member['checked'] == 0))):
+			elif (new_member['spammer'] == 1) or (new_member['checked'] == 0):
 				try:
 					bot.delete_message(message.chat.id, message.id)				# Удалить уведомление о подключении к группе нового участника
 				except Exception:
 					log(f'Ошибка удаления уведомления {message.id} о подключении к группе нового участника {message.from_user.id}', message.chat.id, message.id)
-
-				new_members_list.remove(new_member)
-
+			
+			if new_member['checked'] == 0:
 				mfcc = member_false_checkin_count(message.chat.id, message.from_user.id, config.period_allowed_checks)
 				mfcca = member_false_checkin_count(message.chat.id, message.from_user.id)
 				if mfcc > 1:
@@ -1112,12 +1109,14 @@ def handler_new_chat_members(message):
 				else:
 					log(f'Новый участник {member_info(message.from_user)} не прошёл проверку', message.chat.id)
 				if mfcca > 1:
-					log(f'Новый участник {member_info(message.from_user)} всего пытался пройти проверку {mfcca} раз')
+					log(f'Новый участник {member_info(message.from_user)} всего пытался пройти проверку {mfcca} раз', message.chat.id)
 
 				if mfcc >= config.number_allowed_checks:
 					block_member(message.chat.id, message.from_user.id)		# Блокировать участника навсегда при множественных неудачных проверках
 				else:
 					block_member(message.chat.id, message.from_user.id, period_block=config.minutes_between_checkin*60)	# Блокировать участника временно при неудачной проверке
+
+			new_members_list.remove(new_member)
 
 # ======================================================================
 
@@ -1131,7 +1130,7 @@ def handler_captcha(message):
 	
 	if is_group_allowed(message):	# Проверка группы
 		
-		if not {'chat_id': message.chat.id, 'user_id': message.from_user.id, 'checked': 0} in new_members_list:
+		if not {'chat_id': message.chat.id, 'user_id': message.from_user.id, 'checked': 0, 'spammer': 0} in new_members_list:
 			log(f'Запрос captcha не от нового пользователя {member_info(message.from_user)}', message.chat.id, message.id)
 
 		else:
@@ -1193,7 +1192,7 @@ def handler_messages(message):
 			for spam_marker in spam_set_new_member:
 				if (len(message.text.split(' ')) > 20
 				and (spam_marker in str(message.text).casefold() or spam_marker in str(message.caption).casefold())):
-					new_members_list.remove(new_member)
+					new_member['spammer'] = 1
 					log(f'Спам метка -{spam_marker}- от нового участника {member_info(message.from_user)}', message.chat.id, message.id)
 					block_member(message.chat.id, message.from_user.id)		# Блокировка нового участника за спам
 					break
