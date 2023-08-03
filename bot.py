@@ -1343,17 +1343,17 @@ def handler_messages(message):
 
 							if ((marker_find_in_text or marker_find_in_caption)
 							and (url not in str(message.text).casefold())
-							and (url not in str(message.caption).casefold())
-							and ((log_marker_last_id(message.chat.id, f'Запрос {url}') < message.id - config.can_repeat_info))):
-								log(f'Запрос {url} от {member_info(message.from_user)}', message.chat.id, message.id)
-								text = marker[2]
-								try:
-									bot.send_message(message.chat.id, text, parse_mode='html', disable_web_page_preview=True)
-								except Exception:
-									log(f'Ошибка отправки сообщения по запросу {url}', message.chat.id, message.id)
-							elif marker_find_in_text or marker_find_in_caption:
-								counter = log_marker_last_id(message.chat.id, f'Запрос {url}') - message.id
-								log(f'Пропущен запрос {url} ({counter}) от {member_info(message.from_user)}', message.chat.id, message.id)
+							and (url not in str(message.caption).casefold())):
+								if log_marker_last_id(message.chat.id, f'Запрос {url}') < (message.id - config.can_repeat_info):
+									log(f'Запрос {url} от {member_info(message.from_user)}', message.chat.id, message.id)
+									text = marker[2]
+									try:
+										bot.send_message(message.chat.id, text, parse_mode='html', disable_web_page_preview=True)
+									except Exception:
+										log(f'Ошибка отправки сообщения по запросу {url}', message.chat.id, message.id)
+								else:
+									counter = log_marker_last_id(message.chat.id, f'Запрос {url}') - message.id
+									log(f'Пропущен запрос {url} ({counter}) от {member_info(message.from_user)}', message.chat.id, message.id)
 
 # ----------------------- Обработка STL и STEP -------------------------
 
