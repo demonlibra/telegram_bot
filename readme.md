@@ -9,7 +9,7 @@
 Основан на [pyTelegramBotAPI](https://pypi.org/project/pyTelegramBotAPI) (режим **синхронный**, метод опроса [polling](https://docs-python.ru/packages/biblioteka-python-telegram-bot-python/ispolzovanie-webhook))  
 Проверен на [Python 3.10.6](https://www.python.org) и [Ubuntu Server 22.04](https://ubuntu.com/download/server)  
 
-Подробное описание функционала в файле [description.md](description.md) и на [форуме UNI](https://uni3d.store/viewtopic.php?t=1090)  
+Подробное описание функционала в файле [description.md](description.md) и на [форуме UNI](https://forum.uni-3d.ru/viewtopic.php?t=1090)  
 
 <img src="https://github.com/demonlibra/telegram_bot/blob/master/log.png" width="300">
 

@@ -791,7 +791,7 @@ def handler_audio_messages(message):
 	if is_group_allowed(message):	# Проверка группы
 		messages_add_new(message)														# Запись в таблицу message
 
-		if config.delete_audio_message:
+		if config.delete_audio_messages:
 			try:
 				bot.delete_message(message.chat.id, message.id)						# Удалить голосовое сообщение
 			except Exception:
@@ -963,7 +963,7 @@ def handler_mute(message):
 				if check_mute:
 					log(f'mute на {time_mute_h} ч. участника {member_info(message.reply_to_message.from_user)}', message.chat.id, message.id)
 					text = (
-						f'<b>{message.reply_to_message.from_user.first_name}</b>,'
+						f'<b>{message.reply_to_message.from_user.first_name}</b>, '
 						f'самое время отвлечься на что-нибудь другое.'
 						f'\nБлокировка действует в течении {time_mute_h} ч.')
 					try:
@@ -1346,9 +1346,8 @@ def handler_messages(message):
 							and (url not in str(message.caption).casefold())):
 								if log_marker_last_id(message.chat.id, f'Запрос {url}') < (message.id - config.can_repeat_info):
 									log(f'Запрос {url} от {member_info(message.from_user)}', message.chat.id, message.id)
-									text = marker[2]
 									try:
-										bot.send_message(message.chat.id, text, parse_mode='html', disable_web_page_preview=True)
+										bot.send_message(message.chat.id, marker[2], parse_mode='html', disable_web_page_preview=True)
 									except Exception:
 										log(f'Ошибка отправки сообщения по запросу {url}', message.chat.id, message.id)
 								else:

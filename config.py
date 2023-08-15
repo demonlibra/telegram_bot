@@ -29,7 +29,7 @@ ban_days = 367																				# Дней блокировки пользов
 days_in_group_to_use_ban = 30															# Участнику разрешается использовать ban, если он состоит в группе больше указанного количества дней
 days_in_group_can_be_banned = 7														# К участнику можно применить ban, если он в группе меньше заданного количества дней 
 
-delete_audio_message = True															# Удалять аудио сообщения (нет - 0 или False или None) (да - 1 или True )
+delete_audio_messages = True															# Удалять аудио сообщения (нет: 0 или False или None) (да: 1 или True )
 
 statistics_period_days = 7																# Формирование статистики за период (дней)
 statistics_time_send = '12:05'														# Время отправки статистики
