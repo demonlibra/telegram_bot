@@ -919,24 +919,20 @@ def handler_ban_id(message):
 def handler_mute(message):
 	if is_group_allowed(message):														# Проверка группы
 		messages_add_new(message)														# Запись в таблицу message
+
 		text = ''
-		
-		count = 1
 		check_rights = is_admin(message.chat.id, message.from_user.id)
 		if check_rights == False:
-			text = f'{count}. <b>{message.from_user.first_name}</b>, вам не разрешено использовать команду <b>/mute</b>.\n'
-			count += 1
-		if check_rights == None:
-			text = f'{count}. <b>{message.from_user.first_name}</b>, не удалось проверить права.\n'
-			count += 1
-	
-		if not message.reply_to_message:	# Если mute отправлен НЕ ответом на другое сообщение
+			text = f'<b>{message.from_user.first_name}</b>, вам не разрешено использовать команду <b>/mute</b>'
+		elif check_rights == None:
+			text = f'<b>{message.from_user.first_name}</b>, не удалось проверить права'
+		elif not message.reply_to_message:	# Если mute отправлен НЕ ответом на другое сообщение
 			log(f'Запрос mute не в ответ от {member_info(message.from_user)}', message.chat.id, message.id)
 			text = (
-				f'{text}{count}. Отправьте <b>/mute</b> в ответ на сообщение пользователя, '
+				f'Отправьте <b>/mute</b> в ответ на сообщение пользователя, '
 				f'которого необходимо заблокировать.'
 				f'\nУкажите количество часов блокировки (по умолчанию 24). '
-				f'Например, <b>/mute 12</b>.')
+				f'Например, <b>/mute 12</b>')
 
 		if text:
 			try:
@@ -981,18 +977,17 @@ def handler_mute(message):
 def handler_unmute(message):
 	if is_group_allowed(message):														# Проверка группы
 		messages_add_new(message)														# Запись в таблицу message			
-		text = ''
 
+		text = ''
 		check_rights = is_admin(message.chat.id, message.from_user.id)
 		if check_rights == False:
-			text = f'<b>{message.from_user.first_name}</b>, вам не разрешено использовать команду <b>unmute</b>.\n'
-		if check_rights == None:
-			text = f'<b>{message.from_user.first_name}</b>, не удалось проверить права.\n'
-
-		if not message.reply_to_message:
+			text = f'<b>{message.from_user.first_name}</b>, вам не разрешено использовать команду <b>/unmute</b>'
+		elif check_rights == None:
+			text = f'<b>{message.from_user.first_name}</b>, не удалось проверить права'
+		elif not message.reply_to_message:
 			log(f'Запрос unmute не в ответ от {member_info(message.from_user)}', message.chat.id, message.id)
 			text = (
-				f'{text}Отправьте <b>unmute</b> или <b>umute</b>'
+				f'Отправьте <b>unmute</b> или <b>umute</b>'
 				f' в ответ на сообщение пользователя, '
 				f'с которого необходимо снять временную блокировку.')
 
