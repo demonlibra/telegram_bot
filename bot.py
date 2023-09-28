@@ -793,7 +793,7 @@ def handler_audio_messages(message):
 
 		if config.delete_audio_messages:
 			try:
-				bot.delete_message(message.chat.id, message.id)						# Удалить голосовое сообщение
+				bot.delete_message(message.chat.id, message.id)					# Удалить голосовое сообщение
 			except Exception:
 				log(f'Ошибка удаления аудио сообщения {message.id}', message.chat.id, message.id)
 			else:
@@ -835,6 +835,12 @@ def handler_ban(message):
 			member_banned_time_in_group = time.time() - time_joined_banned
 			if member_banned_time_in_group > (config.days_in_group_can_be_banned*24*60*60):
 				log(f'Запрос ban от {member_info(message.from_user)} на участника {member_info(message.reply_to_message.from_user)}, который более недели', message.chat.id, message.id)
+
+				if time_joined_banned:
+					log(f'Участник {member_info(message.reply_to_message.from_user)} с {time.strftime("%d-%m-%Y", time.localtime(time_joined_banned))}', message.chat.id)
+				else:
+					log(f'Отсутствует запись в таблице members об участнике {member_info(message.reply_to_message.from_user)}', message.chat.id)
+
 				text = f'{text}{count}. <b>/ban</b> может быть применён только к участнику, состоящему в группе менее недели. Появится админ и всех рассудит.\n'
 				for admin_id in config.admins_id:
 					try:
