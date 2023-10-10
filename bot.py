@@ -1095,7 +1095,7 @@ def handler_new_chat_members(message):
 					log(f'Новый участник {member_info(message.from_user)} прошёл проверку', message.chat.id)
 
 			# Новый участник НЕ прошёл проверку
-			elif ((message.content_type == 'new_chat_members')
+			elif ((message.content_type == 'new_chat_members')	# Если было уведомление присоединения нового участника
 			and (not time_checkin or time_blocked)):
 				try:
 					bot.delete_message(message.chat.id, message.id)				# Удалить уведомление о подключении к группе нового участника
@@ -1175,9 +1175,8 @@ def handler_messages(message):
 		#log(f'user_id={message.from_user.id} time_joined={time_joined} time_checkin={time_checkin} not_is_admin={not is_admin(message.chat.id, message.from_user.id)}')
 
 		# Сообщение от непроверенного участника
-		if (not is_admin(message.chat.id, message.from_user.id) and
-		(not time_joined or
-		(time_joined and not time_checkin and (time.time()-time_joined) > (config.minutes_for_checkin * 60)))):
+		if (not is_admin(message.chat.id, message.from_user.id)
+		and (not time_joined or (time_joined and not time_checkin and (time.time()-time_joined) > (config.minutes_for_checkin * 60)))):
 			try:
 				bot.delete_message(message.chat.id, message.id)					# Удалить сообщение нового участника группы
 			except Exception:
@@ -1188,9 +1187,8 @@ def handler_messages(message):
 			return
 
 		# Сообщение от нового участника, находящегося в процессе проверки
-		elif (not is_admin(message.chat.id, message.from_user.id) and
-		(time_joined and not time_checkin and
-		((time.time()-time_joined) < (config.minutes_for_checkin * 60)))):
+		elif (not is_admin(message.chat.id, message.from_user.id)
+		and time_joined and not time_checkin and ((time.time()-time_joined) < (config.minutes_for_checkin * 60))):
 			try:
 				bot.delete_message(message.chat.id, message.id)					# Удалить сообщение нового участника группы
 			except Exception:
