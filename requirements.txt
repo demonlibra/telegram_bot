@@ -1,3 +1,4 @@
 pyTelegramBotAPI
 schedule
 multicolorcaptcha
+cherrypy

@@ -7,6 +7,17 @@
 API_TOKEN = ''				# API Token бота
 bot_id = API_TOKEN.split(':')[0]														# id бота содержится в API_TOKEN
 
+# Способ получения сообщений от сервера Telegram. Раскомментировать нужное
+type_connection = 'polling'
+#type_connection = 'webhook'
+
+# Параметры webhook
+WEBHOOK_HOST = ''														# Постоянный IP адрес сервера, на котором запущен бот
+WEBHOOK_PORT = 8443																		# 443, 80, 88 или 8443
+WEBHOOK_LISTEN = '0.0.0.0'																# Слушать указанный адрес
+WEBHOOK_SSL_CERT = 'webhook_cert.pem'												# Путь к сертификату
+WEBHOOK_SSL_PRIV = 'webhook_pkey.pem'												# Путь к приватному ключу
+
 # После запуска бота отправить команду /get_chat_id и добавить id в кортеж chats_id
 chats_id = ('')																			# id разрешённых чатов
 admins_id = ()																				# id админов

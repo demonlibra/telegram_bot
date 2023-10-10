@@ -6,14 +6,14 @@
 и прочтения книги **Простой Python. Современный стиль программирования** - *Билл Любанович*
 
 Бот подходит для небольших групп со средней активностью  
-Основан на [pyTelegramBotAPI](https://pypi.org/project/pyTelegramBotAPI) (режим **синхронный**, метод опроса [polling](https://docs-python.ru/packages/biblioteka-python-telegram-bot-python/ispolzovanie-webhook))  
+Основан на [pyTelegramBotAPI](https://pypi.org/project/pyTelegramBotAPI) (режим **синхронный**, метод опроса [polling или webhook](https://docs-python.ru/packages/biblioteka-python-telegram-bot-python/ispolzovanie-webhook))  
 Проверен на [Python 3.10.6](https://www.python.org) и [Ubuntu Server 22.04](https://ubuntu.com/download/server)  
 
 Подробное описание функционала в файле [description.md](description.md) и на [форуме UNI](https://forum.uni-3d.ru/viewtopic.php?t=1090)  
 
 <img src="https://github.com/demonlibra/telegram_bot/blob/master/log.png" width="300">
 
-Для тестирования бот можно запустить даже на домашнем ноутбуке, статический и белый IP не требуются  
+Для тестирования бот можно запустить в режиме polling даже на домашнем ноутбуке, статический и белый IP не требуются  
 Для полноценного использования лучше использовать [VPS](https://ru.wikipedia.org/wiki/VPS)   
 Бот подключен для тестов к Telegram группе [unitestgroup](https://t.me/unitestgroup)
 

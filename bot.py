@@ -7,6 +7,9 @@
 
 import config																				# Файл с параметрами config.py
 
+if config.type_connection == 'webhook':
+	import cherrypy
+
 import time
 import re																					# Библиотека регулярных выражений
 import schedule																			# Библиотека выполнения задач по расписанию
@@ -16,7 +19,6 @@ import os
 import sys
 import string
 import subprocess
-from requests.exceptions import ConnectionError
 
 from multicolorcaptcha import CaptchaGenerator									# https://pypi.org/project/multicolorcaptcha/
 
@@ -28,20 +30,58 @@ from telebot import version
 
 
 # -------------------------- Поток 1 - Бот -----------------------------
-def run_Bot():
-	try:
-		bot.infinity_polling(interval=1, long_polling_timeout=5, timeout=30)
-	except (telebot.apihelper.ApiException, RequestException) as e:
-		log(f'Ошибка {e}')
-		time.sleep(15)
+def run_Bot_polling():
+	bot.remove_webhook()
+	time.sleep(1)
+	bot.infinity_polling(interval=1, long_polling_timeout=5, timeout=30)
+
+def run_Bot_webhook():
+	WEBHOOK_URL_BASE = f'https://{config.WEBHOOK_HOST}:{config.WEBHOOK_PORT}'
+	WEBHOOK_URL_PATH = f'/{config.API_TOKEN}/'
+
+	# Webhook сервер
+	class WebhookServer(object):
+		@cherrypy.expose
+		def index(self):
+			if ('content-length' in cherrypy.request.headers
+			and 'content-type' in cherrypy.request.headers
+			and cherrypy.request.headers['content-type'] == 'application/json'):
+				length = int(cherrypy.request.headers['content-length'])
+				json_string = cherrypy.request.body.read(length).decode("utf-8")
+				update = telebot.types.Update.de_json(json_string)
+				bot.process_new_updates([update])	# Проверка входящего сообщения
+				return ''
+			else:
+				raise cherrypy.HTTPError(403)
+
+	# Снимаем вебхук перед повторной установкой (избавляет от некоторых проблем)
+	bot.remove_webhook()
+	time.sleep(1)
+
+	# Ставим заново вебхук
+	bot.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH,certificate=open(config.WEBHOOK_SSL_CERT, 'r'))
+
+	# Указываем настройки сервера CherryPy
+	cherrypy.config.update({
+		'server.socket_host': config.WEBHOOK_LISTEN,
+		'server.socket_port': config.WEBHOOK_PORT,
+		'server.ssl_module': 'builtin',
+		'server.ssl_certificate': config.WEBHOOK_SSL_CERT,
+		'server.ssl_private_key': config.WEBHOOK_SSL_PRIV,
+		'log.screen': True
+	})
+
+	 # Собственно, запуск!
+	cherrypy.quickstart(WebhookServer(), WEBHOOK_URL_PATH, {'/': {}})
+
 # ------------------- Поток 2 - Задачи по расписанию -------------------
-def run_Schedulers():																		
+def run_Schedulers():
 	schedule.every().sunday.at(config.statistics_time_send).\
 		do(statistics_send, chat_id=config.chats_id[0])							# Отправка статистики
-	
+
 	schedule.every().monday.at(config.db_time_clean).\
 		do(db_clean)																		# Очистка базы данных
-	
+
 	while True:
 		schedule.run_pending()
 		time.sleep(10)
@@ -80,18 +120,17 @@ def log(log_text, chat_id=False, message_id=False):
 	time_marker = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
 	print(f'\n{time_marker} {log_text}')											# Вывод сообщения в консоль
 
-											# Запись сообщения в файл 
 	if chat_id: log_chat_id = f' в группе {chat_id}'
 	else: log_chat_id = ''
 	if message_id: log_message_id = f' - {message_id}'
 	else: log_message_id = ''
-			
-	with open (path_log, 'a') as file:
+
+	with open (path_log, 'a') as file:												# Запись сообщения в файл
 		file.write(f'\n{time_marker} {log_text}{log_chat_id}{log_message_id}')
 
 	table_name = 'log'
 	sqlite_query = f"INSERT INTO {table_name} (chat_id, message_id, log_text, unix_time) VALUES ({chat_id}, {message_id}, '{log_text}', {int(time.time())})"
-	try:																						# Запись сообщения в базу данных 
+	try:																						# Запись сообщения в базу данных
 		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 			cursor.execute(sqlite_query)
@@ -165,13 +204,13 @@ def is_group_allowed(message, type=None):
 			bot.send_message(message.chat.id, text, parse_mode='html')		# Отправка злых матюков
 		except Exception:
 			log(f'Ошибка отправки недовольства', message.chat.id)
-		
+
 		try:
 			bot.leave_chat(message.chat.id) 											# Выход из чужой группы
 		except Exception:
 			log(f'Ошибка выхода из группы', message.chat.id)
-		
-		try:			
+
+		try:
 			bot_raw_data = bot.get_chat_member(message.chat.id, config.bot_id)	# Получение данных бота
 		except Exception:
 			bot_name = config.bot_id
@@ -241,7 +280,7 @@ def db_initialization():
 # ----------------------- Очистка базы данных --------------------------
 def db_clean():
 	db_delete_old_data('log', 'unix_time', 365)
-	
+
 	size_before_clean = os.path.getsize(path_db)
 	try:
 		with sqlite3.connect(path_db) as sqlite_connection:
@@ -279,7 +318,7 @@ def member_add_new(chat_id, user_id, time_joined):
 			cursor.execute(sqlite_query)
 	except sqlite3.Error as error:
 		log(f'Ошибка добавления нового участника в таблицу members {user_id} {error}', chat_id)
-			
+
 # --------------------- Проверка нового участника ----------------------
 def member_checkin(chat_id, user_id):
 	table_name = 'members'
@@ -303,7 +342,7 @@ def member_checkin(chat_id, user_id):
 
 	except sqlite3.Error as error:
 		log(f'Ошибка получения состояния участника {user_id} {error}', chat_id)
-		
+
 # ----------- Количество неудачных проверок нового участника -----------
 def member_false_checkin_count(chat_id, user_id, period=time.time()/(24*60*60)):
 	table_name = 'members'
@@ -317,7 +356,7 @@ def member_false_checkin_count(chat_id, user_id, period=time.time()/(24*60*60)):
 		return number
 	except sqlite3.Error as error:
 		log(f'Ошибка получения количества неудачных проверок {user_id} {error}', chat_id)
-	
+
 # ----------------------- Данные пользователя --------------------------
 def member_info(user_data):
 	return f'{user_data.id} @{user_data.username} {user_data.first_name} {user_data.last_name}'
@@ -361,7 +400,7 @@ def ban_vote_add(chat_id, user_banned_id, user_voted_id):
 	try:
 		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
-			cursor.execute(sqlite_query)			
+			cursor.execute(sqlite_query)
 	except sqlite3.Error as error:
 		log(f'Ошибка записи {user_banned_id} в таблицу ban {error}', chat_id)
 
@@ -391,7 +430,7 @@ def messages_add_new(message):
 	except sqlite3.Error as error:
 		log(f'Ошибка записи данных в таблицу messages о сообщении {message.id} от {member_info(message.from_user)} {error}', message.chat.id, message.id)
 
-# ---------------- Удаление сообщений участника группы ------------------ 
+# ---------------- Удаление сообщений участника группы -----------------
 def messages_delete(chat_id, from_user_id):
 	table_name = 'messages'
 	sqlite_query = f"SELECT message_id FROM {table_name} WHERE chat_id=={chat_id} AND from_user_id=={from_user_id} AND unix_time>{time.time()-2*24*60*60}"
@@ -417,12 +456,12 @@ def statistics_send(chat_id, period=config.statistics_period_days):
 		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
 			cursor.row_factory = lambda cursor, row: row[0]	# Вывод только первого элемента вместо кортежа
-			
+
 			# Прошли проверку за период
 			sqlite_query = f"SELECT count(id) FROM members WHERE chat_id=={chat_id} AND time_checkin!=0 AND time_joined>{time.time()-period*24*60*60}"
 			cursor.execute(sqlite_query)
 			number_checked = cursor.fetchone()
-			
+
 			# Не прошли проверку за период
 			sqlite_query = f"SELECT count(id) FROM members WHERE chat_id=={chat_id} AND time_checkin==0 AND time_joined>{time.time()-period*24*60*60}"
 			cursor.execute(sqlite_query)
@@ -437,7 +476,7 @@ def statistics_send(chat_id, period=config.statistics_period_days):
 			sqlite_query = f"SELECT count(id) FROM members WHERE chat_id=={chat_id} AND time_checkin==1"
 			cursor.execute(sqlite_query)
 			number_checked_all = cursor.fetchone()
-			
+
 			# Дата начала работы бота
 			sqlite_query = f"SELECT min(time_joined) FROM members WHERE chat_id=={chat_id}"
 			cursor.execute(sqlite_query)
@@ -466,7 +505,7 @@ def statistics_send(chat_id, period=config.statistics_period_days):
 				total_messages = f'{str(last_message_id)[:-6]}.{str(last_message_id)[-6:-5]}M'
 
 		#sqlite_connection.close()				# Почему-то с fetchone(), если не закрыть, то появляется ошибка database is locked
-	
+
 	except sqlite3.Error as error:
 		log(f'Ошибка получения статистики из базы данных {error}', chat_id)
 
@@ -607,26 +646,26 @@ def handler_get_log(message):
 					cursor = sqlite_connection.cursor()
 					cursor.execute(sqlite_query)
 					records = cursor.fetchall()										# Необработанный список из таблицы log нужен чтобы после получить количество записей по маркеру
-					
+
 				log_text = ''
 				j = 0
 				for record in records:
 					if marker.casefold() in record[2].casefold():
 						j += 1
-						
+
 						if record[0]: chat_id = f' {record[0]}'
 						else: chat_id = ''
-						
+
 						if record[1]: message_id = f' {record[1]}'
 						else: message_id = ''
-						
+
 						log_text += f'\n\n {time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(record[3]))} {chat_id} {message_id} {record[2]}'
 						if j == length: break
 
 				try:
 					bot.send_message(message.chat.id, log_text, parse_mode='html') # Отправка строк log
 				except Exception:
-					log(f'Ошибка отправки {length} строк log в ответ на /get_log', message.chat.id, message.id)		
+					log(f'Ошибка отправки {length} строк log в ответ на /get_log', message.chat.id, message.id)
 
 		else:																					# Отправить файл log, если НЕ передано количество строк вместе с командой /get_log
 			upload_filename = f'log_{time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())}.txt'
@@ -735,14 +774,14 @@ def handler_member_id(message):
 	if is_group_allowed(message):														# Проверка группы
 		messages_add_new(message)														# Запись в таблицу message
 		log(f'Команда {message.text} от {member_info(message.from_user)}', message.chat.id, message.id)
-		
+
 		count = 0
 		if len(message.text.split(' ')) > 1:
 			ids = message.text.split(' ')[1:]
 			for id in ids:
 				if id.isnumeric():
 					count += 1
-					try:			
+					try:
 						member_raw_data = bot.get_chat_member(message.chat.id, id)	# Получение данных участника
 						bot.send_message(message.chat.id, member_raw_data)		# Отправка raw данных участника в чат по id
 					except Exception:
@@ -754,7 +793,7 @@ def handler_member_id(message):
 				bot.send_message(message.chat.id, text, parse_mode='html')
 			except Exception:
 				log(f'Ошибка отправки сообщения, не передан id с командой /member_id', message.chat.id, message.id)
-			
+
 # ======================================================================
 
 
@@ -774,12 +813,12 @@ def handler_help(message):
 			for site in rows:
 				if site[0] and 'http' in site[1]:
 					row_buttons.append(telebot.types.InlineKeyboardButton(site[0], url=site[1])) # Добавляем в список кнопку
-			inline_buttons.keyboard.append(row_buttons)							# Формируем строку кнопок из списка 
+			inline_buttons.keyboard.append(row_buttons)							# Формируем строку кнопок из списка
 
 		text = (
 			f"Чтобы заблокировать негодяя, ответьте на его сообщение"
 			f" текстом <b>@ban</b>, <b>/ban</b> или <b>bban</b>")
-		try:																					
+		try:
 			bot.send_message(message.chat.id, text, parse_mode='html', reply_markup=inline_buttons)
 		except Exception:
 			log(f'Ошибка отправки сообщения в ответ на /help {message.id}', message.chat.id, message.id)
@@ -814,10 +853,10 @@ def handler_ban(message):
 		messages_add_new(message)														# Запись в таблицу message
 		time_joined_voted, time_checkin_voted, _ = member_checkin(message.chat.id, message.from_user.id)
 		text = ''
-		
+
 		if not time_checkin_voted:	# Участник не прошёл проверку
 			log(f'Запрос ban от {member_info(message.from_user)} не прошедшего проверку', message.chat.id, message.id)
-		
+
 		else:
 			count = 1
 			# Если участник, применяющий ban, состоит в группе менее nnn дней
@@ -828,7 +867,7 @@ def handler_ban(message):
 				count += 1
 
 			# Если ban отправлен НЕ ответом на другое сообщение
-			if not message.reply_to_message:												
+			if not message.reply_to_message:
 				log(f'Запрос ban не в ответ от {member_info(message.from_user)}', message.chat.id, message.id)
 				text = f'{text}{count}. Команду <b>@ban</b>, <b>/ban</b> или <b>bban</b> необходимо отправить в ответ на сообщение участника группы, которого предлагается заблокировать.\n'
 				count += 1
@@ -863,7 +902,7 @@ def handler_ban(message):
 			else:																					# Если ban разрешён
 				banned_user_id = message.reply_to_message.from_user.id			# id пользователя для блокировки
 				banned_user_first_name = str(message.reply_to_message.from_user.first_name)
-				
+
 				log(f'Запрос ban от {member_info(message.from_user)} на блокировку {member_info(message.reply_to_message.from_user)}', message.chat.id, message.id)
 
 				inline_button = telebot.types.InlineKeyboardMarkup()				# Кнопка Забанить
@@ -886,7 +925,7 @@ def handler_ban(message):
 def handler_ban_id(message):
 	command = message.text.split()[0] # Содержит ban_id или unban_id
 	log(f'{member_info(message.from_user)} отправил команду {message.text}', message.chat.id, message.id)
-	
+
 	if not is_admin(message.chat.id, message.from_user.id):
 		log(f'Команда {command} не от администратора группы {member_info(message.from_user)}', message.chat.id, message.id)
 		text = f'<b>{message.from_user.first_name}</b>, вам не разрешено использовать команду <b>{command}</b>'
@@ -958,7 +997,7 @@ def handler_mute(message):
 				time_mute_h = int(line[1])												# Получение время часов mute из текста
 			except Exception:
 				time_mute_h = 24															# Время mute 24 часа по умолчанию
-			
+
 			time_mute_s = time.time() + time_mute_h * 60 * 60			# Расчёт времени окончания блокировки
 			#time_mute_s = time.time() + 60										# для тестов
 			try:
@@ -986,7 +1025,7 @@ def handler_mute(message):
 @bot.message_handler(regexp=r'(?i)\A(\/|@|)(un|u)mute\b')
 def handler_unmute(message):
 	if is_group_allowed(message):														# Проверка группы
-		messages_add_new(message)														# Запись в таблицу message			
+		messages_add_new(message)														# Запись в таблицу message
 
 		text = ''
 		check_rights = is_admin(message.chat.id, message.from_user.id)
@@ -1101,7 +1140,7 @@ def handler_new_chat_members(message):
 					bot.delete_message(message.chat.id, message.id)				# Удалить уведомление о подключении к группе нового участника
 				except Exception:
 					log(f'Ошибка удаления уведомления {message.id} о подключении к группе нового участника {message.from_user.id}', message.chat.id, message.id)
-			
+
 			if not time_checkin:
 				mfcc = member_false_checkin_count(message.chat.id, message.from_user.id, config.period_allowed_checks)
 				mfcca = member_false_checkin_count(message.chat.id, message.from_user.id)
@@ -1125,10 +1164,10 @@ def handler_new_chat_members(message):
 @bot.message_handler(commands=['captcha'])										# Выполняется, если сообщение содержит команду /captcha
 def handler_captcha(message):
 	global captcha_list
-	
+
 	if is_group_allowed(message):	# Проверка группы
 		try:																				# Удаление сообщения с командой /captcha
-			bot.delete_message(message.chat.id, message.id)					
+			bot.delete_message(message.chat.id, message.id)
 		except Exception:
 			log(f'Ошибка удаления сообщения /captcha {message.id} от нового участника {member_info(message.from_user)}', message.chat.id, message.id)
 
@@ -1138,13 +1177,13 @@ def handler_captcha(message):
 		and ((time.time()-time_joined) < (config.minutes_for_checkin*60))):	# Если участник проходит проверку:
 
 			captcha_del_records(message.chat.id, message.from_user.id)		# Удаление предыдущей captcha
-				
+
 			captcha_size_num = 2															# Captcha image size number (2 -> 640x360)
 			generator = CaptchaGenerator(captcha_size_num)						# Create Captcha Generator object of specified size
 			captcha = generator.gen_captcha_image(difficult_level=3)			# Generate a captcha image
 			catcha_image = captcha.image												# Get information of standard captcha
 			captcha_characters = captcha.characters								# Цифры из captcha
-			
+
 			text = (
 				f'Отправьте сообщение с цифрами из изображения.'
 				f'\nДля отправки другого изображения повторно используйте команду /captcha')
@@ -1170,7 +1209,7 @@ def handler_messages(message):
 		messages_add_new(message)														# Запись в таблицу message
 
 # ----------------- Проверка нового участника группы -------------------
-	
+
 		time_joined, time_checkin, _ = member_checkin(message.chat.id, message.from_user.id)
 		#log(f'user_id={message.from_user.id} time_joined={time_joined} time_checkin={time_checkin} not_is_admin={not is_admin(message.chat.id, message.from_user.id)}')
 
@@ -1229,7 +1268,7 @@ def handler_messages(message):
 					block_member(message.chat.id, message.from_user.id)	# Блокировка участника за спам
 					break
 
-			else:				# Если пройдена проверка на спам 
+			else:				# Если пройдена проверка на спам
 
 # ------------------------ Фильтр ругательств --------------------------
 
@@ -1258,7 +1297,7 @@ def handler_messages(message):
 						bot.reply_to(message, text, parse_mode='html', disable_web_page_preview=True)
 					except Exception:
 						log(f'Ошибка отправки уведомления о ругательстве {member_info(message.from_user)}', message.chat.id)
-						
+
 					try:
 						bot.delete_message(message.chat.id, message.id)				# Удалить ругательное сообщение
 					except Exception:
@@ -1297,7 +1336,7 @@ def handler_messages(message):
 							bot.reply_to(message, text, parse_mode='html') 					# Отправка сообщения
 						except Exception:
 							log(f'Ошибка удаления сообщения от безымянного участника', message.chat.id, message.id)
-							
+
 # -------------------------- Сообщение боту ----------------------------
 
 					if message.reply_to_message:
@@ -1317,14 +1356,14 @@ def handler_messages(message):
 					if (re.search(r'https://(www\.)?aliexpress\.(ru|com)/item/(\d*)\.html\?', str(message.text).casefold())
 					or re.search(r'https://(www\.)?aliexpress\.(ru|com)/item/(\d*)\.html\?', str(message.caption).casefold())):
 						log(f'Сообщение {message.id} со здоровенной ссылкой aliexpress от {member_info(message.from_user)}', message.chat.id, message.id)
-						
+
 						pattern = r'html\?(.*?)(\s|\n|$)'
 						new_message = re.sub(pattern, f'html\n', message.text)
 						if message.from_user.username:
 							username = f' (@{message.from_user.username})'
 						else:
 							username = ''
-						
+
 						text = f'<b>{message.from_user.first_name}</b>{username},'\
 								 f' Ваше сообщение заменено'\
 								 f'\n{new_message}'
@@ -1340,7 +1379,7 @@ def handler_messages(message):
 									log(f'Ошибка удаления сообщения aliexpress {message.id}', message.chat.id, message.id)
 
 # ---------------- Отправка ссылок по ключевым фразам ------------------
-					
+
 					for marker in config.markers_links:
 						if marker:
 							pattern = marker[0]
@@ -1366,7 +1405,7 @@ def handler_messages(message):
 					if message.content_type == 'document' and message.document.file_size < config.model3d_max_size_preview:
 						file_name = message.document.file_name						# Имя файла
 						file_ext = file_name[file_name.rfind('.')+1:]			# Расширение файла
-						
+
 						if (re.search(r'\b(st(e?)p|stl)\b', file_ext.casefold())):
 
 							if (file_ext.casefold() == 'stl'):
@@ -1390,9 +1429,9 @@ def handler_messages(message):
 							path_model3d = os.path.join(path_dir_models3d, f'{file_info.file_unique_id}.{file_ext}')
 							with open(path_model3d, 'wb') as new_file:
 								new_file.write(downloaded_file)									# Сохранение 3d модели
-							
+
 							path_stl = re.sub(r'(?i)\.st(e?)p$', '.stl', path_model3d)
-							
+
 							if (re.search(r'\b(st(e?)p)\b', file_ext.casefold())):		# Если модель в формате STEP
 								#log(f'Отправлена step модель {file_name}', message.chat.id, message.id)
 								command = f'gmsh -v 0 "{path_model3d}" -0 -o "{path_stl}"'	# Конвертирование STEP в STL при помощи gmsh и occt
@@ -1407,7 +1446,7 @@ def handler_messages(message):
 								else:
 									command = f'{path_minirender} -o -- -tilt 30 -yaw 20 -w {config.preview_resolution} -h {config.preview_resolution} "{path_stl}" | convert - png:-'
 									image = subprocess.check_output(command, shell=True)
-									
+
 									if sys.getsizeof(image) < 500:
 										log(f'Ошибка создания превью файла -{file_name}-', message.chat.id, message.id)
 									else:
@@ -1432,9 +1471,9 @@ def handler_callback_query(call):
 		time_checkin_voted, time_joined_voted, _ = member_checkin(call.message.chat.id, call.from_user.id)
 
 		# Участник прошёл проверку и состоит в группе больше 30 дней
-		if not time_checkin_voted:	
+		if not time_checkin_voted:
 			log(f'Голосование ban от {member_info(call.from_user)} не прошедшего проверку', call.message.chat.id, call.message.id)
-		
+
 		elif (time.time()-time_joined_voted < config.days_in_group_to_use_ban*24*60*60) and not is_admin(call.message.chat.id, call.from_user.id):
 			log(f'Голосование ban от {member_info(call.from_user)} в группе менее {config.days_in_group_to_use_ban} дней ({(int(time.time())-time_joined_voted)/(24*60*60)})', call.message.chat.id, call.message.id)
 		else:
@@ -1444,10 +1483,10 @@ def handler_callback_query(call):
 			if call.data.split('|||')[0] == 'ban':									# Если запрос содержит ban
 				banned_user_id = call.data.split('|||')[1]						# id пользователя для блокировки
 				banned_first_name = call.data.split('|||')[2]					# Имя пользователя, которого блокируем
-				banned_by_message_id = call.data.split('|||')[3]				# id сообщения, которое содержит ban 
+				banned_by_message_id = call.data.split('|||')[3]				# id сообщения, которое содержит ban
 				ban_init_time = call.data.split('|||')[4]							# Время создания опроса блокировки
-				
-				list_ban_voted = ban_voted_get_list(call.message.chat.id, banned_user_id, ban_init_time)	
+
+				list_ban_voted = ban_voted_get_list(call.message.chat.id, banned_user_id, ban_init_time)
 				if call.from_user.id in list_ban_voted:							# Исключение дублирования голосования блокировки
 				#if not True: # Если нужно временно разрешить дублировать запрос блокировки от одного пользователя
 					log(f'Повторная попытка голосования за блокировку {banned_first_name} {banned_user_id} от {member_info(call.from_user)}', call.message.chat.id, call.message.id)
@@ -1506,8 +1545,12 @@ if __name__ == '__main__':
 	captcha_list = []																		# Список действующих кодов captcha
 	censured_list = []																	# Список сообщений с ругательствами
 
-	t1 = Thread(target=run_Bot)														# Поток 1 - Бот
+	if config.type_connection == 'webhook':
+		t1 = Thread(target=run_Bot_webhook)											# Поток 1
+	else:
+		t1 = Thread(target=run_Bot_polling)
+
 	t2 = Thread(target=run_Schedulers)												# Поток 2 - Задачи по расписанию
-	
+
 	t1.start() 																				# Запуск потока 1
 	t2.start()																				# Запуск потока 2
