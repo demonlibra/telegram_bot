@@ -1127,24 +1127,15 @@ def handler_captcha(message):
 	global captcha_list
 	
 	if is_group_allowed(message):	# Проверка группы
+		try:																				# Удаление сообщения с командой /captcha
+			bot.delete_message(message.chat.id, message.id)					
+		except Exception:
+			log(f'Ошибка удаления сообщения /captcha {message.id} от нового участника {member_info(message.from_user)}', message.chat.id, message.id)
+
 		time_joined, time_checkin, _ = member_checkin(message.chat.id, message.from_user.id)
 
-		if (time_checkin
-		or (time_joined and not time_checkin and (time.time()-time_joined) > (config.minutes_for_checkin * 60))):	# Если участник НЕ проходит проверку
-			try:																				# Удаление сообщения с командой /captcha
-				bot.delete_message(message.chat.id, message.id)					
-			except Exception:
-				log(f'Ошибка удаления сообщения /captcha {message.id} от нового участника {member_info(message.from_user)}', message.chat.id, message.id)
-
-			log(f'Запрос captcha не от нового пользователя {member_info(message.from_user)}', message.chat.id, message.id)
-
-		elif (time_joined and not time_checkin and
-		((time.time() - time_joined) < (config.minutes_for_checkin * 60))):	# Если участник проходит проверку:
-			try:																				# Удаление сообщения с командой /captcha
-				bot.delete_message(message.chat.id, message.id)					
-				#log(f'Удалено сообщение /captcha id {message.id} от нового участника {member_info(message.from_user)}', message.chat.id, message.id)
-			except Exception:
-				log(f'Ошибка удаления сообщения /captcha {message.id} от нового участника {member_info(message.from_user)}', message.chat.id, message.id)
+		if (time_joined and not time_checkin
+		and ((time.time()-time_joined) < (config.minutes_for_checkin*60))):	# Если участник проходит проверку:
 
 			captcha_del_records(message.chat.id, message.from_user.id)		# Удаление предыдущей captcha
 				
@@ -1164,6 +1155,9 @@ def handler_captcha(message):
 			else:
 				captcha_list.append({'chat_id': message.chat.id, 'user_id': message.from_user.id, 'captcha': captcha_characters, 'captcha_id': message_captcha.id})
 				log(f'Отправлена captcha {captcha_characters} с id {message_captcha.id} для {member_info(message.from_user)}', message.chat.id, message_captcha.id)
+
+		else:
+			log(f'Запрос captcha не от нового участника {member_info(message.from_user)}', message.chat.id, message.id)
 
 # ======================================================================
 
