@@ -6,7 +6,7 @@
 и прочтения книги **Простой Python. Современный стиль программирования** - *Билл Любанович*
 
 Бот подходит для небольших групп со средней активностью  
-Основан на [pyTelegramBotAPI](https://pypi.org/project/pyTelegramBotAPI) (режим **синхронный**, метод опроса [polling или webhook](https://docs-python.ru/packages/biblioteka-python-telegram-bot-python/ispolzovanie-webhook))  
+Основан на [pyTelegramBotAPI](https://pypi.org/project/pyTelegramBotAPI) (режим **синхронный**, методы опроса [polling или webhook](https://docs-python.ru/packages/biblioteka-python-telegram-bot-python/ispolzovanie-webhook))  
 Проверен на [Python 3.10.6](https://www.python.org) и [Ubuntu Server 22.04](https://ubuntu.com/download/server)  
 
 Подробное описание функционала в файле [description.md](description.md) и на [форуме UNI](https://forum.uni-3d.ru/viewtopic.php?t=1090)  
@@ -38,9 +38,14 @@
 
 6. Задайте параметры в файле **config.py**
 
-7. Для создания миниатюр моделей **STL** используется [minirender](https://github.com/aslze/minirender).  
-Установите **gmsh** для создания миниатюр моделей **STEP** через конвертирование в **STL**.  
+7. Для создания миниатюр моделей **STL** используется [minirender](https://github.com/aslze/minirender)  
+Установите **gmsh** для создания миниатюр моделей **STEP** через конвертирование в **STL**  
 `sudo apt install gmsh`  
+
+8. Для метода webhook создайте [сертификат и закрытый ключ](https://mastergroosha.github.io/telegram-tutorial/docs/lesson_04/)  
+`sudo apt-get install openssl`  
+`openssl genrsa -out webhook_pkey.pem 2048`  
+`openssl req -new -x509 -days 3650 -key webhook_pkey.pem -out webhook_cert.pem`  
 
 ## Запуск
 
