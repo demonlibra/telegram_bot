@@ -16,6 +16,7 @@ import os
 import sys
 import string
 import subprocess
+from requests.exceptions import ConnectionError
 
 from multicolorcaptcha import CaptchaGenerator									# https://pypi.org/project/multicolorcaptcha/
 
@@ -28,8 +29,11 @@ from telebot import version
 
 # -------------------------- Поток 1 - Бот -----------------------------
 def run_Bot():
-	bot.infinity_polling(interval=1, timeout=30)
- 
+	try:
+		bot.infinity_polling(interval=1, long_polling_timeout=5, timeout=30)
+	except (telebot.apihelper.ApiException, RequestException) as e:
+		log(f'Ошибка {e}')
+		time.sleep(15)
 # ------------------- Поток 2 - Задачи по расписанию -------------------
 def run_Schedulers():																		
 	schedule.every().sunday.at(config.statistics_time_send).\
@@ -94,7 +98,7 @@ def log(log_text, chat_id=False, message_id=False):
 	except sqlite3.Error as error:
 		print(f'Ошибка записи данных в таблицу log {error}')
 
-	if 'ошибка' in log_text.casefold():
+	if str(log_text).casefold().startswith('ошибка'):
 		try:
 			bot.send_message(config.admins_id[0], log_text)
 		except Exception:
@@ -279,7 +283,7 @@ def member_add_new(chat_id, user_id, time_joined):
 # --------------------- Проверка нового участника ----------------------
 def member_checkin(chat_id, user_id):
 	table_name = 'members'
-	sqlite_query = f"SELECT time_checkin, time_joined FROM {table_name} WHERE chat_id=={chat_id} AND user_id=={user_id} ORDER BY id DESC"
+	sqlite_query = f"SELECT time_joined, time_checkin, time_blocked FROM {table_name} WHERE chat_id=={chat_id} AND user_id=={user_id} ORDER BY id DESC"
 	try:
 		with sqlite3.connect(path_db) as sqlite_connection:
 			cursor = sqlite_connection.cursor()
@@ -287,16 +291,15 @@ def member_checkin(chat_id, user_id):
 			record = cursor.fetchone()
 
 		if record:
-			if record[0] == 0:
-				user_checked = False
-			else:
-				user_checked = True
-			time_joined = record[1]	# [time_checkin, time_joined]
+			time_joined = record[0]
+			time_checkin = record[1]
+			time_blocked = record[2]
 		else:
-			user_checked = None
-			time_joined = 0
+			time_joined = None
+			time_checkin = None
+			time_blocked = None
 
-		return user_checked, time_joined
+		return time_joined, time_checkin, time_blocked
 
 	except sqlite3.Error as error:
 		log(f'Ошибка получения состояния участника {user_id} {error}', chat_id)
@@ -809,69 +812,70 @@ def handler_audio_messages(message):
 def handler_ban(message):
 	if is_group_allowed(message):														# Проверка группы
 		messages_add_new(message)														# Запись в таблицу message
-		checkin_voted, time_joined_voted = member_checkin(message.chat.id, message.from_user.id)
+		time_joined_voted, time_checkin_voted, _ = member_checkin(message.chat.id, message.from_user.id)
 		text = ''
 		
-		if (checkin_voted == False):	# Участник прошёл проверку
+		if not time_checkin_voted:	# Участник не прошёл проверку
 			log(f'Запрос ban от {member_info(message.from_user)} не прошедшего проверку', message.chat.id, message.id)
 		
-		count = 1
-		# Если участник, применяющий ban, состоит в группе менее nnn дней
-		member_voted_time_in_group = time.time()-time_joined_voted
-		if member_voted_time_in_group < (config.days_in_group_to_use_ban*24*60*60):
-			text = f'{count}. Вам запрещено использовать команду /ban, так как Вы состоите в группе меньше {config.days_in_group_to_use_ban} дней.\n'
-			log(f'Запрос ban от {member_info(message.from_user)} в группе менее {config.days_in_group_to_use_ban} дней ({int((time.time()-time_joined_voted)/(24*60*60))})', message.chat.id, message.id)
-			count += 1
+		else:
+			count = 1
+			# Если участник, применяющий ban, состоит в группе менее nnn дней
+			member_voted_time_in_group = time.time()-time_joined_voted
+			if member_voted_time_in_group < (config.days_in_group_to_use_ban*24*60*60):
+				text = f'{count}. Вам запрещено использовать команду /ban, так как Вы состоите в группе меньше {config.days_in_group_to_use_ban} дней.\n'
+				log(f'Запрос ban от {member_info(message.from_user)} в группе менее {config.days_in_group_to_use_ban} дней ({int((time.time()-time_joined_voted)/(24*60*60))})', message.chat.id, message.id)
+				count += 1
 
-		# Если ban отправлен НЕ ответом на другое сообщение
-		if not message.reply_to_message:												
-			log(f'Запрос ban не в ответ от {member_info(message.from_user)}', message.chat.id, message.id)
-			text = f'{text}{count}. Команду <b>@ban</b>, <b>/ban</b> или <b>bban</b> необходимо отправить в ответ на сообщение участника группы, которого предлагается заблокировать.\n'
-			count += 1
+			# Если ban отправлен НЕ ответом на другое сообщение
+			if not message.reply_to_message:												
+				log(f'Запрос ban не в ответ от {member_info(message.from_user)}', message.chat.id, message.id)
+				text = f'{text}{count}. Команду <b>@ban</b>, <b>/ban</b> или <b>bban</b> необходимо отправить в ответ на сообщение участника группы, которого предлагается заблокировать.\n'
+				count += 1
 
-		# Если ban пытаются применить к участнику, который давно присоединился к группе
-		if message.reply_to_message:
-			_, time_joined_banned = member_checkin(message.chat.id, message.reply_to_message.from_user.id)
-			member_banned_time_in_group = time.time() - time_joined_banned
-			if member_banned_time_in_group > (config.days_in_group_can_be_banned*24*60*60):
-				log(f'Запрос ban от {member_info(message.from_user)} на участника {member_info(message.reply_to_message.from_user)}, который более недели', message.chat.id, message.id)
+			# Если ban пытаются применить к участнику, который давно присоединился к группе
+			if message.reply_to_message:
+				time_joined_banned, _, _ = member_checkin(message.chat.id, message.reply_to_message.from_user.id)
+				member_banned_time_in_group = time.time() - time_joined_banned
+				if member_banned_time_in_group > (config.days_in_group_can_be_banned*24*60*60):
+					log(f'Запрос ban от {member_info(message.from_user)} на участника {member_info(message.reply_to_message.from_user)}, который более недели', message.chat.id, message.id)
 
-				if time_joined_banned:
-					log(f'Участник {member_info(message.reply_to_message.from_user)} с {time.strftime("%d-%m-%Y", time.localtime(time_joined_banned))}', message.chat.id)
-				else:
-					log(f'Отсутствует запись в таблице members об участнике {member_info(message.reply_to_message.from_user)}', message.chat.id)
-
-				text = f'{text}{count}. <b>/ban</b> может быть применён только к участнику, состоящему в группе менее недели. Появится админ и всех рассудит.\n'
-				for admin_id in config.admins_id:
-					try:
-						admin_username = bot.get_chat_member(message.chat.id, admin_id).user.username
-					except Exception:
-						log(f'Ошибка получения username админа {admin_id}', message.chat.id)
+					if time_joined_banned:
+						log(f'Участник {member_info(message.reply_to_message.from_user)} с {time.strftime("%d-%m-%Y", time.localtime(time_joined_banned))}', message.chat.id)
 					else:
-						text += f'@{admin_username} '
+						log(f'Отсутствует запись в таблице members об участнике {member_info(message.reply_to_message.from_user)}', message.chat.id)
 
-		if text:
-			try:
-				bot.send_message(message.chat.id, text, parse_mode='html')
-			except Exception:
-				log(f'Ошибка отправки сообщения ban', message.chat.id)
+					text = f'{text}{count}. <b>/ban</b> может быть применён только к участнику, состоящему в группе менее недели. Появится админ и всех рассудит.\n'
+					for admin_id in config.admins_id:
+						try:
+							admin_username = bot.get_chat_member(message.chat.id, admin_id).user.username
+						except Exception:
+							log(f'Ошибка получения username админа {admin_id}', message.chat.id)
+						else:
+							text += f'@{admin_username} '
 
-		else:																					# Если ban разрешён
-			banned_user_id = message.reply_to_message.from_user.id			# id пользователя для блокировки
-			banned_user_first_name = str(message.reply_to_message.from_user.first_name)
-			
-			log(f'Запрос ban от {member_info(message.from_user)} на блокировку {member_info(message.reply_to_message.from_user)}', message.chat.id, message.id)
+			if text:
+				try:
+					bot.send_message(message.chat.id, text, parse_mode='html')
+				except Exception:
+					log(f'Ошибка отправки сообщения ban', message.chat.id)
 
-			inline_button = telebot.types.InlineKeyboardMarkup()				# Кнопка Забанить
-			inline_button.add(telebot.types.InlineKeyboardButton(f'Забанить 1/{config.members_poll_for_ban}', callback_data=f'ban|||{banned_user_id}|||{banned_user_first_name}|||{message.id}|||{message.date}'))
+			else:																					# Если ban разрешён
+				banned_user_id = message.reply_to_message.from_user.id			# id пользователя для блокировки
+				banned_user_first_name = str(message.reply_to_message.from_user.first_name)
+				
+				log(f'Запрос ban от {member_info(message.from_user)} на блокировку {member_info(message.reply_to_message.from_user)}', message.chat.id, message.id)
 
-			text = f'Появилось предложение забанить:\n<b>{banned_user_first_name}</b>'
-			try:
-				bot.send_message(message.chat.id, text, parse_mode='html', reply_markup=inline_button)
-			except Exception:
-				log(f'Ошибка отправки кнопки Забанить', message.chat.id)
-			else:
-				ban_vote_add(message.chat.id, banned_user_id, user_voted_id=message.from_user.id) # только голосование за ban
+				inline_button = telebot.types.InlineKeyboardMarkup()				# Кнопка Забанить
+				inline_button.add(telebot.types.InlineKeyboardButton(f'Забанить 1/{config.members_poll_for_ban}', callback_data=f'ban|||{banned_user_id}|||{banned_user_first_name}|||{message.id}|||{message.date}'))
+
+				text = f'Появилось предложение забанить:\n<b>{banned_user_first_name}</b>'
+				try:
+					bot.send_message(message.chat.id, text, parse_mode='html', reply_markup=inline_button)
+				except Exception:
+					log(f'Ошибка отправки кнопки Забанить', message.chat.id)
+				else:
+					ban_vote_add(message.chat.id, banned_user_id, user_voted_id=message.from_user.id) # только голосование за ban
 
 # ======================================================================
 
@@ -1027,7 +1031,8 @@ def handler_unmute(message):
 @bot.message_handler(content_types=["new_chat_members"])						# Если обнаружено подключение к группе нового участника
 def handler_new_chat_members(message):
 	if is_group_allowed(message):														# Проверка группы
-		if message.from_user.id != message.new_chat_members[0].id:			# Не выполнять проверку, если нового участника кто-то присоединил к группе
+		if (message.new_chat_members and
+		message.from_user.id != message.new_chat_members[0].id):				# Не выполнять проверку, если нового участника кто-то присоединил к группе
 			for new_member in message.new_chat_members:							# При подключении участников, это массив
 				log(f'Нового участника {member_info(new_member)} присоединил {member_info(message.from_user)}', message.chat.id, message.id)
 
@@ -1035,10 +1040,7 @@ def handler_new_chat_members(message):
 				member_set_checked(message.chat.id, new_member.id)				# Подтвердить проверку нового участника
 
 		else: # Новый участник подключился самостоятельно
-			new_member = {'chat_id': message.chat.id, 'user_id': message.from_user.id, 'checked': 0, 'spammer': 0}
-			global new_members_list
-			new_members_list.append(new_member)
-
+			member_add_new(message.chat.id, message.from_user.id, message.date)	# Заносим данные о новом участнике в БД
 			log(f'Новый участник {member_info(message.from_user)}', message.chat.id, message.id)
 
 			if message.from_user.username:
@@ -1056,19 +1058,17 @@ def handler_new_chat_members(message):
 			try:
 				invite_message = bot.send_message(message.chat.id, text, parse_mode='html') # Отправка приветствия нового участника группы
 			except Exception:
-				invite_message = None
 				log(f'Ошибка отправки сообщения проверки нового участника', message.chat.id)
-			
-			member_add_new(message.chat.id, message.new_chat_members[0].id, message.date)	# Заносим данные о новом участнике в БД
 
-			# Периодический опрос, не прошёл ли новый участник проверку через содержимое списка new_members_list
+			# Периодический опрос, не прошёл ли новый участник проверку
 			time_check_end = time.monotonic() + config.minutes_for_checkin * 60
 			while time.monotonic() < time_check_end:
-				if (new_member['spammer'] == 1) or (new_member['checked'] == 1):
-					# Если новый участник удалён за спам или прошёл проверку
+				_, time_checkin, time_blocked = member_checkin(message.chat.id, message.from_user.id)
+				if time_checkin or time_blocked:
 					break
-				else: time.sleep(1)
-			
+				else:
+					time.sleep(1)
+
 			captcha_del_records(message.chat.id, message.from_user.id)		# Удаление последней captcha
 
 			try:
@@ -1077,8 +1077,7 @@ def handler_new_chat_members(message):
 				log(f'Ошибка удаления приветствия нового участника {invite_message.id}', message.chat.id, invite_message.id)
 
 			# Новый участник прошёл проверку
-			if	new_member['checked'] == 1:
-				member_set_checked(message.chat.id, message.from_user.id)
+			if	time_checkin:
 				if message.from_user.username:
 					username = f' (@{message.from_user.username})'
 				else: username = ''
@@ -1096,13 +1095,14 @@ def handler_new_chat_members(message):
 					log(f'Новый участник {member_info(message.from_user)} прошёл проверку', message.chat.id)
 
 			# Новый участник НЕ прошёл проверку
-			elif (new_member['spammer'] == 1) or (new_member['checked'] == 0):
+			elif ((message.content_type == 'new_chat_members')
+			and (not time_checkin or time_blocked)):
 				try:
 					bot.delete_message(message.chat.id, message.id)				# Удалить уведомление о подключении к группе нового участника
 				except Exception:
 					log(f'Ошибка удаления уведомления {message.id} о подключении к группе нового участника {message.from_user.id}', message.chat.id, message.id)
 			
-			if new_member['checked'] == 0:
+			if not time_checkin:
 				mfcc = member_false_checkin_count(message.chat.id, message.from_user.id, config.period_allowed_checks)
 				mfcca = member_false_checkin_count(message.chat.id, message.from_user.id)
 				if mfcc > 1:
@@ -1117,8 +1117,6 @@ def handler_new_chat_members(message):
 				else:
 					block_member(message.chat.id, message.from_user.id, period_block=config.minutes_between_checkin*60)	# Блокировать участника временно при неудачной проверке
 
-			new_members_list.remove(new_member)
-
 # ======================================================================
 
 
@@ -1127,14 +1125,21 @@ def handler_new_chat_members(message):
 @bot.message_handler(commands=['captcha'])										# Выполняется, если сообщение содержит команду /captcha
 def handler_captcha(message):
 	global captcha_list
-	global new_members_list
 	
 	if is_group_allowed(message):	# Проверка группы
-		
-		if not {'chat_id': message.chat.id, 'user_id': message.from_user.id, 'checked': 0, 'spammer': 0} in new_members_list:
+		time_joined, time_checkin, _ = member_checkin(message.chat.id, message.from_user.id)
+
+		if (time_checkin
+		or (time_joined and not time_checkin and (time.time()-time_joined) > (config.minutes_for_checkin * 60))):	# Если участник НЕ проходит проверку
+			try:																				# Удаление сообщения с командой /captcha
+				bot.delete_message(message.chat.id, message.id)					
+			except Exception:
+				log(f'Ошибка удаления сообщения /captcha {message.id} от нового участника {member_info(message.from_user)}', message.chat.id, message.id)
+
 			log(f'Запрос captcha не от нового пользователя {member_info(message.from_user)}', message.chat.id, message.id)
 
-		else:
+		elif (time_joined and not time_checkin and
+		((time.time() - time_joined) < (config.minutes_for_checkin * 60))):	# Если участник проходит проверку:
 			try:																				# Удаление сообщения с командой /captcha
 				bot.delete_message(message.chat.id, message.id)					
 				#log(f'Удалено сообщение /captcha id {message.id} от нового участника {member_info(message.from_user)}', message.chat.id, message.id)
@@ -1171,17 +1176,27 @@ def handler_messages(message):
 		messages_add_new(message)														# Запись в таблицу message
 
 # ----------------- Проверка нового участника группы -------------------
+	
+		time_joined, time_checkin, _ = member_checkin(message.chat.id, message.from_user.id)
+		#log(f'user_id={message.from_user.id} time_joined={time_joined} time_checkin={time_checkin} not_is_admin={not is_admin(message.chat.id, message.from_user.id)}')
 
-		global new_members_list
-		for new_member in new_members_list: # Поиск в списке новых участников
-			if ((new_member['chat_id'] == message.chat.id)
-			and (new_member['user_id'] == message.from_user.id)
-			and (new_member['checked'] == 0)):
-				is_new_member = True
-				break
-		else: is_new_member = False
+		# Сообщение от непроверенного участника
+		if (not is_admin(message.chat.id, message.from_user.id) and
+		(not time_joined or
+		(time_joined and not time_checkin and (time.time()-time_joined) > (config.minutes_for_checkin * 60)))):
+			try:
+				bot.delete_message(message.chat.id, message.id)					# Удалить сообщение нового участника группы
+			except Exception:
+				log(f'Ошибка удаления сообщения {message.id} {member_info(message.from_user)}', message.chat.id, message.id)
+			else:
+				log(f'Удалено сообщение {message.id} нового участника {member_info(message.from_user)}: {message.text}', message.chat.id, message.id)
+			handler_new_chat_members(message)
+			return
 
-		if is_new_member:	# Если участник проходит проверку
+		# Сообщение от нового участника, находящегося в процессе проверки
+		elif (not is_admin(message.chat.id, message.from_user.id) and
+		(time_joined and not time_checkin and
+		((time.time()-time_joined) < (config.minutes_for_checkin * 60)))):
 			try:
 				bot.delete_message(message.chat.id, message.id)					# Удалить сообщение нового участника группы
 			except Exception:
@@ -1193,7 +1208,6 @@ def handler_messages(message):
 			for spam_marker in spam_set_new_member:
 				if (len(message.text.split(' ')) > 20
 				and (spam_marker in str(message.text).casefold() or spam_marker in str(message.caption).casefold())):
-					new_member['spammer'] = 1
 					log(f'Спам метка -{spam_marker}- от нового участника {member_info(message.from_user)}', message.chat.id, message.id)
 					block_member(message.chat.id, message.from_user.id)		# Блокировка нового участника за спам
 					break
@@ -1202,12 +1216,12 @@ def handler_messages(message):
 					if ((captcha_record['chat_id'] == message.chat.id)
 					and (captcha_record['user_id'] == message.from_user.id)
 					and (str(captcha_record['captcha']) in str(message.text).casefold()[:20])):
-						new_member['checked'] = 1
+						member_set_checked(message.chat.id, message.from_user.id)
 						break
 				else:
 					for marker in config.check_marker:								# Перебор ключевых фраз
 						if marker.casefold() in str(message.text).casefold()[:20]:
-							new_member['checked'] = 1
+							member_set_checked(message.chat.id, message.from_user.id)
 							break
 
 		else:		# Если участник НЕ проходит проверку
@@ -1423,10 +1437,10 @@ def handler_messages(message):
 @bot.callback_query_handler(func=lambda call:True)
 def handler_callback_query(call):
 	if str(call.message.chat.id) in config.chats_id:
-		checkin_voted, time_joined_voted = member_checkin(call.message.chat.id, call.from_user.id)
+		time_checkin_voted, time_joined_voted, _ = member_checkin(call.message.chat.id, call.from_user.id)
 
 		# Участник прошёл проверку и состоит в группе больше 30 дней
-		if (checkin_voted == False):	
+		if not time_checkin_voted:	
 			log(f'Голосование ban от {member_info(call.from_user)} не прошедшего проверку', call.message.chat.id, call.message.id)
 		
 		elif (time.time()-time_joined_voted < config.days_in_group_to_use_ban*24*60*60) and not is_admin(call.message.chat.id, call.from_user.id):
@@ -1499,7 +1513,6 @@ if __name__ == '__main__':
 
 	captcha_list = []																		# Список действующих кодов captcha
 	censured_list = []																	# Список сообщений с ругательствами
-	new_members_list = []																# Список участников, проходящих проверку
 
 	t1 = Thread(target=run_Bot)														# Поток 1 - Бот
 	t2 = Thread(target=run_Schedulers)												# Поток 2 - Задачи по расписанию
