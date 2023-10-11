@@ -65,7 +65,7 @@ def run_Bot_webhook():
 	cherrypy.config.update({
 		'server.socket_host': config.WEBHOOK_LISTEN,
 		'server.socket_port': config.WEBHOOK_PORT,
-		'server.ssl_module': 'builtin',
+		'server.ssl_module': 'pyopenssl',
 		'server.ssl_certificate': config.WEBHOOK_SSL_CERT,
 		'server.ssl_private_key': config.WEBHOOK_SSL_PRIV,
 		'log.screen': True
@@ -1215,6 +1215,7 @@ def handler_messages(message):
 
 		# Сообщение от непроверенного участника
 		if (not is_admin(message.chat.id, message.from_user.id)
+		and message.from_user.id not in config.pass_id
 		and (not time_joined or (time_joined and not time_checkin and (time.time()-time_joined) > (config.minutes_for_checkin * 60)))):
 			try:
 				bot.delete_message(message.chat.id, message.id)					# Удалить сообщение нового участника группы
@@ -1227,6 +1228,7 @@ def handler_messages(message):
 
 		# Сообщение от нового участника, находящегося в процессе проверки
 		elif (not is_admin(message.chat.id, message.from_user.id)
+		and message.from_user.id not in config.pass_id
 		and time_joined and not time_checkin and ((time.time()-time_joined) < (config.minutes_for_checkin * 60))):
 			try:
 				bot.delete_message(message.chat.id, message.id)					# Удалить сообщение нового участника группы
