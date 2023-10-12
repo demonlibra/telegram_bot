@@ -56,7 +56,7 @@ def run_Bot_webhook():
 
 	# Снимаем вебхук перед повторной установкой (избавляет от некоторых проблем)
 	bot.remove_webhook()
-	time.sleep(1)
+	time.sleep(5)
 
 	# Ставим заново вебхук
 	bot.set_webhook(url=WEBHOOK_URL_BASE + WEBHOOK_URL_PATH,certificate=open(config.WEBHOOK_SSL_CERT, 'r'))
@@ -1222,7 +1222,7 @@ def handler_messages(message):
 			except Exception:
 				log(f'Ошибка удаления сообщения {message.id} {member_info(message.from_user)}', message.chat.id, message.id)
 			else:
-				log(f'Удалено сообщение {message.id} нового участника {member_info(message.from_user)}: {message.text}', message.chat.id, message.id)
+				log(f'Удалено сообщение {message.id} нового участника {member_info(message.from_user)}: <{message.text}>', message.chat.id, message.id)
 			handler_new_chat_members(message)
 			return
 
@@ -1235,7 +1235,7 @@ def handler_messages(message):
 			except Exception:
 				log(f'Ошибка удаления сообщения {message.id} {member_info(message.from_user)}', message.chat.id, message.id)
 			else:
-				log(f'Удалено сообщение {message.id} нового участника {member_info(message.from_user)}: {message.text}', message.chat.id, message.id)
+				log(f'Удалено сообщение {message.id} нового участника {member_info(message.from_user)}: <{message.text}>', message.chat.id, message.id)
 
 			# Проверка нового участника на спам
 			for spam_marker in spam_set_new_member:
@@ -1531,7 +1531,8 @@ if __name__ == '__main__':
 	text = f'bot запущен на сервере '\
 			 f'{os.uname().sysname} {os.uname().release}, '\
 			 f'python {sys.version.split()[0]}, '\
-			 f'pyTelegramBotAPI {telebot.version.__version__}'
+			 f'pyTelegramBotAPI {telebot.version.__version__} '\
+			 f'{config.type_connection}'
 	log(text)																				# Уведомление о запуке бота
 
 	censure_set = set_from_file(get_full_path(config.path_censure))							# Множество материных слов
