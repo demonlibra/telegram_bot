@@ -25,7 +25,7 @@ from multicolorcaptcha import CaptchaGenerator									# https://pypi.org/projec
 import telebot																				# https://pypi.org/project/pyTelegramBotAPI/
 bot = telebot.TeleBot(config.API_TOKEN)
 from telebot import version
- 
+
 # ======================================================================
 
 
@@ -65,10 +65,15 @@ def run_Bot_webhook():
 	cherrypy.config.update({
 		'server.socket_host': config.WEBHOOK_LISTEN,
 		'server.socket_port': config.WEBHOOK_PORT,
-		'server.ssl_module': 'pyopenssl',
+		'server.socket_timeout': 20,
+		'server.ssl_module': 'builtin',
 		'server.ssl_certificate': config.WEBHOOK_SSL_CERT,
 		'server.ssl_private_key': config.WEBHOOK_SSL_PRIV,
-		'log.screen': True
+		'log.screen': False,
+		#'log.error_file': 'cherrypy_web.log',
+		#'log.access_file': 'cherrypy_access.log',
+		'log.error_file': 'cherrypy_error.log'
+
 	})
 
 	 # Собственно, запуск!
@@ -833,7 +838,9 @@ def handler_audio_messages(message):
 	if is_group_allowed(message):	# Проверка группы
 		messages_add_new(message)														# Запись в таблицу message
 
-		if config.delete_audio_messages:
+		if (config.delete_audio_messages
+		and not is_admin(message.chat.id, message.from_user.id)
+		and not message.from_user.id in config.pass_id):
 			try:
 				bot.delete_message(message.chat.id, message.id)					# Удалить голосовое сообщение
 			except Exception:
@@ -926,7 +933,8 @@ def handler_ban_id(message):
 	command = message.text.split()[0] # Содержит ban_id или unban_id
 	log(f'{member_info(message.from_user)} отправил команду {message.text}', message.chat.id, message.id)
 
-	if not is_admin(message.chat.id, message.from_user.id):
+	if (not is_admin(message.chat.id, message.from_user.id)
+	and not message.from_user.id in config.pass_id):
 		log(f'Команда {command} не от администратора группы {member_info(message.from_user)}', message.chat.id, message.id)
 		text = f'<b>{message.from_user.first_name}</b>, вам не разрешено использовать команду <b>{command}</b>'
 		try:
@@ -970,16 +978,14 @@ def handler_mute(message):
 		messages_add_new(message)														# Запись в таблицу message
 
 		text = ''
-		check_rights = is_admin(message.chat.id, message.from_user.id)
-		if check_rights == False:
+		if (not is_admin(message.chat.id, message.from_user.id)
+		and not message.from_user.id in config.pass_id):
 			text = f'<b>{message.from_user.first_name}</b>, вам не разрешено использовать команду <b>/mute</b>'
-		elif check_rights == None:
-			text = f'<b>{message.from_user.first_name}</b>, не удалось проверить права'
 		elif not message.reply_to_message:	# Если mute отправлен НЕ ответом на другое сообщение
 			log(f'Запрос mute не в ответ от {member_info(message.from_user)}', message.chat.id, message.id)
 			text = (
 				f'Отправьте <b>/mute</b> в ответ на сообщение пользователя, '
-				f'которого необходимо заблокировать.'
+				f'которому необходимо временно запретить отправлять сообщения в группу.'
 				f'\nУкажите количество часов блокировки (по умолчанию 24). '
 				f'Например, <b>/mute 12</b>')
 
@@ -1028,17 +1034,15 @@ def handler_unmute(message):
 		messages_add_new(message)														# Запись в таблицу message
 
 		text = ''
-		check_rights = is_admin(message.chat.id, message.from_user.id)
-		if check_rights == False:
+		if (not is_admin(message.chat.id, message.from_user.id)
+		and not message.from_user.id in config.pass_id):
 			text = f'<b>{message.from_user.first_name}</b>, вам не разрешено использовать команду <b>/unmute</b>'
-		elif check_rights == None:
-			text = f'<b>{message.from_user.first_name}</b>, не удалось проверить права'
 		elif not message.reply_to_message:
 			log(f'Запрос unmute не в ответ от {member_info(message.from_user)}', message.chat.id, message.id)
 			text = (
 				f'Отправьте <b>unmute</b> или <b>umute</b>'
 				f' в ответ на сообщение пользователя, '
-				f'с которого необходимо снять временную блокировку.')
+				f'с которого необходимо снять временный запрет отправки сообщений в группу.')
 
 		if text:
 			try:
@@ -1215,7 +1219,7 @@ def handler_messages(message):
 
 		# Сообщение от непроверенного участника
 		if (not is_admin(message.chat.id, message.from_user.id)
-		and message.from_user.id not in config.pass_id
+		and not message.from_user.id in config.pass_id
 		and (not time_joined or (time_joined and not time_checkin and (time.time()-time_joined) > (config.minutes_for_checkin * 60)))):
 			try:
 				bot.delete_message(message.chat.id, message.id)					# Удалить сообщение нового участника группы
@@ -1472,12 +1476,16 @@ def handler_callback_query(call):
 	if str(call.message.chat.id) in config.chats_id:
 		time_checkin_voted, time_joined_voted, _ = member_checkin(call.message.chat.id, call.from_user.id)
 
-		# Участник прошёл проверку и состоит в группе больше 30 дней
-		if not time_checkin_voted:
+		if (not time_checkin_voted
+		and not is_admin(call.message.chat.id, call.from_user.id)
+		and not call.from_user.id in config.pass_id):
 			log(f'Голосование ban от {member_info(call.from_user)} не прошедшего проверку', call.message.chat.id, call.message.id)
 
-		elif (time.time()-time_joined_voted < config.days_in_group_to_use_ban*24*60*60) and not is_admin(call.message.chat.id, call.from_user.id):
+		elif ((time.time()-time_joined_voted < config.days_in_group_to_use_ban*24*60*60)
+		and not is_admin(call.message.chat.id, call.from_user.id)
+		and not call.from_user.id in config.pass_id):
 			log(f'Голосование ban от {member_info(call.from_user)} в группе менее {config.days_in_group_to_use_ban} дней ({(int(time.time())-time_joined_voted)/(24*60*60)})', call.message.chat.id, call.message.id)
+
 		else:
 			log(call.data, call.message.chat.id)
 
